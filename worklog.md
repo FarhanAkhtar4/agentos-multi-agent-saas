@@ -67,3 +67,57 @@ Stage Summary:
 - Projects: CRUD with dialog forms
 - Logs: Filtered log viewer with level indicators
 - Output Viewer: Sheet component for full agent output inspection
+
+---
+Task ID: 5
+Agent: QA Engineer (Code Auditor)
+Task: Comprehensive code audit — identify and fix all bugs, type errors, and code quality issues
+
+Work Log:
+- Read all source files: 12 API routes, orchestrator, agent config, types, store, page.tsx, theme-provider, mini-services/agent-events
+- Identified 7 bugs/issues across the codebase
+- Fixed all issues; ESLint passes clean
+
+Issues Found & Fixed:
+
+### CRITICAL — Orchestrator Context Passing Bug
+**File:** `src/lib/agents/orchestrator.ts` line 116
+**Bug:** When building the LLM prompt for agents after the first (order > 0), the code used `input` (the original user request) for both the "User Request" and "Previous Agent Analysis" sections. The `accumulatedContext` variable—which stores the previous agent's output—was never referenced in the prompt construction. This meant all agents in the pipeline received identical prompts, completely breaking the multi-agent chain.
+**Fix:** Changed `Previous Agent Analysis:\n${input}` → `Previous Agent Analysis:\n${accumulatedContext}`
+
+### CRITICAL — Pipeline Runs Missing `id` Field
+**File:** `src/lib/agents/orchestrator.ts` lines 72-84, 140, 171, 215-223, 236-244
+**Bug:** The `runAgent()` function and `PipelineResult.agentRuns` interface did not include the `id` field from the DB-created `AgentRun` record. The frontend's `PipelineRunCard` uses `key={run.id}`, resulting in `undefined` keys and potential React reconciliation issues.
+**Fix:** Added `id: string` to `runAgent()` return type and all `agentRuns.push()` calls, returning `agentRun.id` / `skippedRun.id` / `result.id`.
+
+### BUG — Chat Messages Not Loaded When Selecting Existing Session
+**File:** `src/app/page.tsx` ChatView component
+**Bug:** When clicking a session in the sidebar, `setCurrentSession(session)` was called with session data from the sessions list API (which doesn't include messages). The UI showed an empty chat even though messages existed in the DB.
+**Fix:** Added `loadMessages(sessionId)` function that fetches `/api/chat/sessions/[id]` and populates local state. Connected session click handler (`handleSelectSession`) to load messages. Also loads messages for the initially-selected session.
+
+### BUG — Chat Session Orphaned When API Creates New Session
+**File:** `src/app/page.tsx` ChatView `handleSend()`
+**Bug:** When sending a message without a session, the API creates a new session with a new ID. The frontend added messages to the old `currentSession` in the store using the old session ID, causing messages to be orphaned from the actual DB session.
+**Fix:** Replaced store-based `addChatMessage` with local `setMessages` state. When the API returns a new session ID different from the current one, the store's `currentSession` is updated to match.
+
+### TYPE — Project Status Cast as `string` Instead of Union Type
+**File:** `src/app/page.tsx` lines 747, 764
+**Bug:** `Project.status` is typed as `'active' | 'completed' | 'archived'` but was cast as `as string`, causing a type mismatch with the store's `setProjects(projects: Project[])` and `addProject(project: Project)`.
+**Fix:** Changed casts to `as Project["status"]` with fallback to `"active"`.
+
+### TYPE — AgentLog Type Mismatch with API Response
+**File:** `src/lib/types.ts` AgentLog interface
+**Bug:** `metadata` was typed as `string | null` (matching the DB schema) but the `/api/logs` endpoint parses it via `JSON.parse()`, returning an object. The API also returns an `agentRun` nested object not in the type.
+**Fix:** Changed `metadata` to `Record<string, unknown> | string | null` and added optional `agentRun` field matching the API response shape.
+
+### CLEANUP — Unused Import
+**File:** `src/app/page.tsx` line 28
+**Bug:** `SystemStatus` was imported but never directly referenced (the store already has the type).
+**Fix:** Replaced with `ChatSession` (now needed for `handleSelectSession`) and `Project` (now needed for proper status casting).
+
+Stage Summary:
+- All 7 issues fixed across orchestrator, types, and frontend
+- ESLint: 0 errors, 0 warnings
+- Pipeline context chain now correctly passes accumulated agent outputs
+- Pipeline run cards have valid React keys from DB IDs
+- Chat view properly loads historical messages and handles new session creation

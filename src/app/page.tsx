@@ -25,7 +25,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useAgentOSStore } from "@/lib/store";
 import type {
-  ViewType, AgentRun, ChatMessage, AgentLog, SystemStatus
+  ViewType, AgentRun, ChatMessage, ChatSession, AgentLog, Project
 } from "@/lib/types";
 
 /* ================================================================
@@ -546,10 +546,11 @@ function PipelineView() {
    ================================================================ */
 
 function ChatView() {
-  const { currentSession, setCurrentSession, chatSessions, setChatSessions, addChatMessage } = useAgentOSStore();
+  const { currentSession, setCurrentSession, chatSessions, setChatSessions } = useAgentOSStore();
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const fetchSessions = async () => {
@@ -560,15 +561,33 @@ function ChatView() {
       setChatSessions(sessions);
       if (sessions.length > 0 && !currentSession) {
         setCurrentSession(sessions[0]);
+        loadMessages(sessions[0].id);
       }
     } catch { /* ignore */ }
   };
 
   useEffect(() => { fetchSessions(); }, []);
 
+  const loadMessages = async (sessionId: string) => {
+    try {
+      const res = await fetch(`/api/chat/sessions/${sessionId}`);
+      const json = await res.json();
+      const session = json.data;
+      if (session?.messages) {
+        setMessages(session.messages);
+        setCurrentSession(session);
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleSelectSession = (session: ChatSession) => {
+    setCurrentSession(session);
+    loadMessages(session.id);
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentSession?.messages]);
+  }, [messages]);
 
   const createNewSession = async () => {
     try {
@@ -577,6 +596,7 @@ function ChatView() {
       const session = json.data;
       setChatSessions(prev => [session, ...prev]);
       setCurrentSession(session);
+      setMessages([]);
     } catch { /* ignore */ }
   };
 
@@ -594,8 +614,14 @@ function ChatView() {
       const json = await res.json();
       const chatData = json.data as Record<string, unknown> | undefined;
       const sid = chatData?.sessionId as string || currentSession?.id || "";
-      addChatMessage({ id: `u-${Date.now()}`, sessionId: sid, role: "user", content: message, createdAt: new Date().toISOString() });
-      addChatMessage({ id: `a-${Date.now()}`, sessionId: sid, role: "assistant", content: (chatData?.message as string) || "No response.", createdAt: new Date().toISOString() });
+      const responseMessage = (chatData?.message as string) || "No response.";
+      const userMsg: ChatMessage = { id: `u-${Date.now()}`, sessionId: sid, role: "user", content: message, createdAt: new Date().toISOString() };
+      const assistantMsg: ChatMessage = { id: `a-${Date.now()}`, sessionId: sid, role: "assistant", content: responseMessage, createdAt: new Date().toISOString() };
+      setMessages(prev => [...prev, userMsg, assistantMsg]);
+      // If API created a new session, update the current session in the store
+      if (sid && currentSession?.id !== sid) {
+        setCurrentSession({ ...currentSession!, id: sid, messages: [userMsg, assistantMsg] });
+      }
     } catch (err) {
       console.error("Chat error:", err);
     } finally {
@@ -607,8 +633,6 @@ function ChatView() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const messages = currentSession?.messages || [];
-
   return (
     <div className="flex h-[calc(100vh-8rem)]">
       <div className="w-64 border-r border-border flex flex-col flex-shrink-0 max-md:hidden">
@@ -618,7 +642,7 @@ function ChatView() {
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
             {chatSessions.map((session) => (
-              <button key={session.id} onClick={() => setCurrentSession(session)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${currentSession?.id === session.id ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
+              <button key={session.id} onClick={() => handleSelectSession(session)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${currentSession?.id === session.id ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
                 <p className="truncate font-medium">{session.title}</p>
                 <p className="text-[10px] opacity-70 mt-0.5">{timeAgo(session.createdAt)}</p>
               </button>
@@ -720,7 +744,7 @@ function ProjectsView() {
       const res = await fetch("/api/projects");
       const json = await res.json();
       const projectData = (json.data || []) as Array<Record<string, unknown>>;
-      setProjects(projectData.map((p) => ({ id: p.id as string, name: p.name as string, description: p.description as string | null, status: p.status as string, createdAt: p.createdAt as string, updatedAt: p.updatedAt as string, _count: { tasks: (p.taskCount as number) ?? 0 } })));
+      setProjects(projectData.map((p) => ({ id: p.id as string, name: p.name as string, description: p.description as string | null, status: p.status as Project["status"], createdAt: p.createdAt as string, updatedAt: p.updatedAt as string, _count: { tasks: (p.taskCount as number) ?? 0 } })));
     
     } catch { /* ignore */ }
   };
@@ -737,7 +761,7 @@ function ProjectsView() {
       });
       const json = await res.json();
       const newProject = json.data as Record<string, unknown>;
-      addProject({ id: newProject.id as string, name: newProject.name as string, description: newProject.description as string | null, status: newProject.status as string, createdAt: newProject.createdAt as string, updatedAt: newProject.updatedAt as string, _count: { tasks: 0 } });
+      addProject({ id: newProject.id as string, name: newProject.name as string, description: newProject.description as string | null, status: (newProject.status as Project["status"]) || "active", createdAt: newProject.createdAt as string, updatedAt: newProject.updatedAt as string, _count: { tasks: 0 } });
       setDialogOpen(false);
       setNewName("");
       setNewDesc("");

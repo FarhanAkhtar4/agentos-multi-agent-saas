@@ -33,8 +33,13 @@ export interface AgentLog {
   runId: string
   level: 'debug' | 'info' | 'warn' | 'error'
   message: string
-  metadata: string | null
+  metadata: Record<string, unknown> | string | null
   createdAt: string
+  agentRun?: {
+    agentType: string
+    agentName: string
+    taskId: string
+  }
 }
 
 export interface Task {

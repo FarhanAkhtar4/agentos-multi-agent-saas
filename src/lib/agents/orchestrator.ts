@@ -13,6 +13,7 @@ interface PipelineResult {
   projectId: string
   success: boolean
   agentRuns: Array<{
+    id: string
     agentType: string
     agentName: string
     status: string
@@ -75,6 +76,7 @@ async function runAgent(
   projectId: string,
   input: string
 ): Promise<{
+  id: string
   output: string | null
   duration: number | null
   error: string | null
@@ -82,7 +84,7 @@ async function runAgent(
 }> {
   const agentConfig = getAgentConfig(agentType)
   if (!agentConfig) {
-    return { output: null, duration: null, error: `Unknown agent type: ${agentType}`, status: 'failed' }
+    return { id: '', output: null, duration: null, error: `Unknown agent type: ${agentType}`, status: 'failed' }
   }
 
   // Create AgentRun record
@@ -113,7 +115,7 @@ async function runAgent(
       const userMessage =
         order === 0
           ? `User Request:\n${input}`
-          : `User Request:\n${input}\n\nPrevious Agent Analysis:\n${input}`
+          : `User Request:\n${input}\n\nPrevious Agent Analysis:\n${accumulatedContext}`
 
       const output = await callLLM(agentConfig.systemPrompt, userMessage)
       const duration = Date.now() - startTime
@@ -135,7 +137,7 @@ async function runAgent(
         { duration, outputLength: output.length }
       )
 
-      return { output, duration, error: null, status: 'completed' }
+      return { id: agentRun.id, output, duration, error: null, status: 'completed' }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
 
@@ -166,7 +168,7 @@ async function runAgent(
     lastError,
   })
 
-  return { output: null, duration: null, error: lastError, status: 'failed' }
+  return { id: agentRun.id, output: null, duration: null, error: lastError, status: 'failed' }
 }
 
 export async function runPipeline(
@@ -211,6 +213,7 @@ export async function runPipeline(
         })
 
         agentRuns.push({
+          id: skippedRun.id,
           agentType: agentConfig.id,
           agentName: agentConfig.name,
           status: 'failed',
@@ -231,6 +234,7 @@ export async function runPipeline(
     const result = await runAgent(agentType, i, taskId, projectId, accumulatedContext)
 
     agentRuns.push({
+      id: result.id,
       agentType,
       agentName: getAgentConfig(agentType)?.name || agentType,
       status: result.status,
