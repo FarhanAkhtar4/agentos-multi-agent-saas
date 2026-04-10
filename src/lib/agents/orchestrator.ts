@@ -74,7 +74,8 @@ async function runAgent(
   order: number,
   taskId: string,
   projectId: string,
-  input: string
+  originalInput: string,
+  previousContext: string | null
 ): Promise<{
   id: string
   output: string | null
@@ -95,7 +96,7 @@ async function runAgent(
       agentType: agentConfig.id,
       agentName: agentConfig.name,
       status: 'running',
-      input,
+      input: previousContext ? `${originalInput}\n\n[Previous Agent Output]:\n${previousContext}` : originalInput,
       order,
     },
   })
@@ -107,15 +108,19 @@ async function runAgent(
 
   let lastError: string | null = null
 
+  // Build the user message for the LLM
+  let userMessage: string
+  if (order === 0) {
+    // First agent (CEO) — receives the original user request only
+    userMessage = `User Request:\n${originalInput}`
+  } else {
+    // Subsequent agents — receive both the original request and previous agent's output
+    userMessage = `User Request:\n${originalInput}\n\nPrevious Agent Analysis:\n${previousContext}`
+  }
+
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const startTime = Date.now()
-
-      // Build the input context for the agent
-      const userMessage =
-        order === 0
-          ? `User Request:\n${input}`
-          : `User Request:\n${input}\n\nPrevious Agent Analysis:\n${accumulatedContext}`
 
       const output = await callLLM(agentConfig.systemPrompt, userMessage)
       const duration = Date.now() - startTime
@@ -186,7 +191,7 @@ export async function runPipeline(
   })
 
   const agentRuns: PipelineResult['agentRuns'] = []
-  let accumulatedContext = input
+  let accumulatedContext: string | null = null
   let hasError = false
   let finalOutput: string | null = null
 
@@ -206,7 +211,7 @@ export async function runPipeline(
             agentType: agentConfig.id,
             agentName: agentConfig.name,
             status: 'failed',
-            input: accumulatedContext,
+            input: accumulatedContext || input,
             order: i,
             error: 'Pipeline stopped due to previous agent failure',
           },
@@ -231,7 +236,7 @@ export async function runPipeline(
       continue
     }
 
-    const result = await runAgent(agentType, i, taskId, projectId, accumulatedContext)
+    const result = await runAgent(agentType, i, taskId, projectId, input, accumulatedContext)
 
     agentRuns.push({
       id: result.id,

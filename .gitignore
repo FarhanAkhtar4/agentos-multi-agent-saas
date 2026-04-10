@@ -59,6 +59,11 @@ mini-services/*/*.log
 # Skills
 /skills/
 
+# System/temp
+.accesslog
+.config
+.stats
+
 # IDE
 .vscode/
 .idea/

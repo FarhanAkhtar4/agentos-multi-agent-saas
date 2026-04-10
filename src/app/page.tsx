@@ -424,7 +424,7 @@ function PipelineRunCard({ run, index }: { run: AgentRun; index: number }) {
                 </Button>
               </div>
               <div className="p-3 rounded-lg bg-background/50 text-xs text-muted-foreground max-h-40 overflow-y-auto font-mono whitespace-pre-wrap">
-                {run.output.length > 300 ? run.output.substring(0, 300) + "..." : run.output}
+                {(run.output?.length ?? 0) > 300 ? run.output!.substring(0, 300) + "..." : (run.output ?? "")}
               </div>
             </div>
           )}
