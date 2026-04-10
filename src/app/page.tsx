@@ -1,17 +1,48 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useTheme } from "next-themes";
 import {
-  Crown, ClipboardList, Code2, ShieldCheck, Server,
-  LayoutDashboard, MessageSquare, FolderKanban, ScrollText,
-  Play, ChevronRight, Loader2, CheckCircle2, XCircle,
-  AlertCircle, Clock, Zap, BarChart3, Brain, Activity,
-  Send, Plus, Eye, PanelRightClose, PanelRightOpen,
-  Bot, User, ArrowRight, Terminal, FileText
+  Crown,
+  Code2,
+  ShieldCheck,
+  Brain,
+  Play,
+  Send,
+  Bot,
+  Terminal,
+  Activity,
+  MessageSquare,
+  Database,
+  Settings,
+  CheckCircle2,
+  XCircle,
+  Loader2,
+  Clock,
+  Zap,
+  ChevronRight,
+  Eye,
+  Search,
+  Plus,
+  Sun,
+  Moon,
+  ArrowRight,
+  LayoutDashboard,
+  AlertCircle,
+  FileText,
+  User,
+  Server,
+  ClipboardList,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,61 +50,137 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useAgentOSStore } from "@/lib/store";
-import type {
-  ViewType, AgentRun, ChatMessage, ChatSession, AgentLog, Project
-} from "@/lib/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 /* ================================================================
-   AGENT CONFIGURATION (CLIENT-SIDE MIRROR)
+   TYPES (self-contained)
    ================================================================ */
 
-const AGENTS_CONFIG = [
-  { id: "ceo", name: "CEO Agent", role: "Chief Executive Officer", color: "#8B5CF6", bgClass: "bg-violet-500/15", textClass: "text-violet-400", borderClass: "border-violet-500/30", icon: Crown },
-  { id: "pm", name: "PM Agent", role: "Product Manager", color: "#F59E0B", bgClass: "bg-amber-500/15", textClass: "text-amber-400", borderClass: "border-amber-500/30", icon: ClipboardList },
-  { id: "developer", name: "Developer Agent", role: "Senior Developer", color: "#10B981", bgClass: "bg-emerald-500/15", textClass: "text-emerald-400", borderClass: "border-emerald-500/30", icon: Code2 },
-  { id: "qa", name: "QA Agent", role: "QA Engineer", color: "#EF4444", bgClass: "bg-red-500/15", textClass: "text-red-400", borderClass: "border-red-500/30", icon: ShieldCheck },
-  { id: "devops", name: "DevOps Agent", role: "DevOps Engineer", color: "#06B6D4", bgClass: "bg-cyan-500/15", textClass: "text-cyan-400", borderClass: "border-cyan-500/30", icon: Server },
+interface AgentDef {
+  id: string;
+  name: string;
+  role: string;
+  description: string;
+  systemPrompt: string;
+  color: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+  icon: React.ElementType;
+}
+
+interface AgentRun {
+  id: string;
+  agentType: string;
+  agentName: string;
+  status: string;
+  input: string | null;
+  output: string | null;
+  error: string | null;
+  duration: number | null;
+  createdAt: string;
+}
+
+interface ChatMessage {
+  id: string;
+  sessionId: string;
+  role: "user" | "assistant";
+  agentType?: string | null;
+  content: string;
+  createdAt: string;
+}
+
+interface ChatSession {
+  id: string;
+  title: string;
+  status: string;
+  messageCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface SystemStats {
+  totalProjects: number;
+  totalTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  totalAgentRuns: number;
+  activeRuns: number;
+  totalSessions: number;
+  successRate: number;
+}
+
+/* ================================================================
+   AGENT CONFIG (client-side mirror)
+   ================================================================ */
+
+const AGENTS: AgentDef[] = [
+  {
+    id: "ceo",
+    name: "CEO Agent",
+    role: "Chief Executive Officer",
+    description:
+      "Analyzes requests and decomposes them into strategic goals with clear success criteria and constraints.",
+    systemPrompt:
+      "You are the CEO Agent of AgentOS. Your role is to analyze the user's request and decompose it into strategic goals. Output a structured analysis including: 1) Core objective, 2) Key deliverables, 3) Success criteria, 4) Constraints and risks.",
+    color: "#8B5CF6",
+    bgClass: "bg-violet-500/15",
+    textClass: "text-violet-400",
+    borderClass: "border-violet-500/30",
+    icon: Crown,
+  },
+  {
+    id: "developer",
+    name: "Developer Agent",
+    role: "Senior Developer",
+    description:
+      "Generates implementation details, architecture decisions, and clean code structures from specifications.",
+    systemPrompt:
+      "You are the Senior Developer Agent of AgentOS. Based on the PM's specification, generate implementation details including: 1) Architecture decisions, 2) Key components, 3) Code structure, 4) Integration points.",
+    color: "#10B981",
+    bgClass: "bg-emerald-500/15",
+    textClass: "text-emerald-400",
+    borderClass: "border-emerald-500/30",
+    icon: Code2,
+  },
+  {
+    id: "qa",
+    name: "QA Agent",
+    role: "QA Engineer",
+    description:
+      "Reviews implementation plans and provides thorough testing strategies and edge-case analysis.",
+    systemPrompt:
+      "You are the QA Engineer Agent of AgentOS. Review the developer's implementation plan and provide: 1) Test strategy, 2) Edge cases, 3) Performance considerations, 4) Potential bugs.",
+    color: "#EF4444",
+    bgClass: "bg-red-500/15",
+    textClass: "text-red-400",
+    borderClass: "border-red-500/30",
+    icon: ShieldCheck,
+  },
 ];
 
-function getAgentConfig(id: string) {
-  return AGENTS_CONFIG.find(a => a.id === id);
+function getAgentDef(id: string): AgentDef | undefined {
+  return AGENTS.find((a) => a.id === id);
 }
 
 /* ================================================================
-   STATUS HELPERS
+   HELPERS
    ================================================================ */
-
-function StatusIcon({ status, className = "h-4 w-4" }: { status: string; className?: string }) {
-  switch (status) {
-    case "running": return <Loader2 className={`${className} animate-spin text-blue-400`} />;
-    case "completed": return <CheckCircle2 className={`${className} text-emerald-400`} />;
-    case "failed": return <XCircle className={`${className} text-red-400`} />;
-    default: return <Clock className={`${className} text-muted-foreground`} />;
-  }
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variants: Record<string, { label: string; className: string }> = {
-    pending: { label: "Pending", className: "bg-secondary text-secondary-foreground" },
-    running: { label: "Running", className: "bg-blue-500/20 text-blue-400 border border-blue-500/30" },
-    completed: { label: "Completed", className: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" },
-    failed: { label: "Failed", className: "bg-red-500/20 text-red-400 border border-red-500/30" },
-    active: { label: "Active", className: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" },
-    archived: { label: "Archived", className: "bg-secondary text-secondary-foreground" },
-    cancelled: { label: "Cancelled", className: "bg-secondary text-secondary-foreground" },
-    low: { label: "Low", className: "bg-secondary text-secondary-foreground" },
-    medium: { label: "Medium", className: "bg-amber-500/20 text-amber-400 border border-amber-500/30" },
-    high: { label: "High", className: "bg-orange-500/20 text-orange-400 border border-orange-500/30" },
-    critical: { label: "Critical", className: "bg-red-500/20 text-red-400 border border-red-500/30" },
-  };
-  const v = variants[status] || { label: status, className: "bg-secondary text-secondary-foreground" };
-  return <Badge variant="outline" className={v.className}>{v.label}</Badge>;
-}
 
 function formatDuration(ms: number | null | undefined): string {
   if (!ms) return "—";
@@ -83,9 +190,7 @@ function formatDuration(ms: number | null | undefined): string {
 }
 
 function timeAgo(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
+  const diff = Date.now() - new Date(dateStr).getTime();
   const seconds = Math.floor(diff / 1000);
   if (seconds < 60) return "just now";
   const minutes = Math.floor(seconds / 60);
@@ -95,287 +200,611 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function StatusIcon({
+  status,
+  className = "h-4 w-4",
+}: {
+  status: string;
+  className?: string;
+}) {
+  switch (status) {
+    case "running":
+      return <Loader2 className={`${className} animate-spin text-violet-400`} />;
+    case "completed":
+      return <CheckCircle2 className={`${className} text-emerald-400`} />;
+    case "failed":
+      return <XCircle className={`${className} text-red-400`} />;
+    default:
+      return <Clock className={`${className} text-muted-foreground`} />;
+  }
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    running: {
+      label: "Running",
+      cls: "bg-violet-500/20 text-violet-400 border-violet-500/30",
+    },
+    completed: {
+      label: "Completed",
+      cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    },
+    failed: {
+      label: "Failed",
+      cls: "bg-red-500/20 text-red-400 border-red-500/30",
+    },
+    pending: {
+      label: "Pending",
+      cls: "bg-secondary text-secondary-foreground",
+    },
+    available: {
+      label: "Available",
+      cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+    },
+  };
+  const m = map[status] || {
+    label: status,
+    cls: "bg-secondary text-secondary-foreground",
+  };
+  return (
+    <Badge variant="outline" className={m.cls}>
+      {m.label}
+    </Badge>
+  );
+}
+
+function truncate(str: string, len: number): string {
+  if (str.length <= len) return str;
+  return str.substring(0, len) + "...";
+}
+
 /* ================================================================
-   TOOLTIP HELPER
+   MAIN PAGE
    ================================================================ */
 
-function TooltipWrapper({ children, text }: { children: React.ReactNode; text: string }) {
-  const [show, setShow] = useState(false);
+export default function AgentOSPage() {
+  const { theme, setTheme } = useTheme();
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [activeTab, setActiveTab] = useState("dashboard");
+
+  // Check status on mount
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/status", { signal: controller.signal })
+      .then((r) => r.json())
+      .then(() => setConnected(true))
+      .catch(() => setConnected(false));
+    return () => controller.abort();
+  }, []);
+
+  const cycleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
+
   return (
-    <div
-      className="relative"
-      onMouseEnter={() => setShow(true)}
-      onMouseLeave={() => setShow(false)}
-    >
-      {children}
-      {show && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 rounded bg-popover text-popover-foreground text-[10px] whitespace-nowrap border shadow-lg z-50 pointer-events-none">
-          {text}
+    <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
+        <div className="flex items-center justify-between px-4 md:px-6 h-14">
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+              <Brain className="h-4.5 w-4.5 text-white" />
+            </div>
+            <span className="text-lg font-bold tracking-tight">
+              AgentOS <span className="text-muted-foreground font-normal text-sm">v2</span>
+            </span>
+          </div>
+
+          {/* Status + Theme */}
+          <div className="flex items-center gap-3">
+            <Badge
+              variant="outline"
+              className={`gap-1.5 text-xs ${
+                connected === true
+                  ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                  : connected === false
+                    ? "bg-red-500/15 text-red-400 border-red-500/30"
+                    : "bg-secondary text-secondary-foreground"
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${connected === true ? "bg-emerald-400" : connected === false ? "bg-red-400" : "bg-muted-foreground animate-pulse"}`}
+              />
+              {connected === true
+                ? "Connected"
+                : connected === false
+                  ? "Disconnected"
+                  : "Checking..."}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={cycleTheme}
+              aria-label="Toggle theme"
+            >
+              <Sun className="h-4 w-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+              <Moon className="absolute h-4 w-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+            </Button>
+          </div>
         </div>
-      )}
+      </header>
+
+      {/* ── TABS ───────────────────────────────────────────── */}
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="flex flex-col flex-1 min-h-0"
+      >
+        <div className="border-b border-border bg-background/60 backdrop-blur-sm px-4 md:px-6">
+          <TabsList className="h-11 bg-transparent p-0 gap-0">
+            {(
+              [
+                { value: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
+                { value: "pipeline", icon: Activity, label: "Pipeline" },
+                { value: "agents", icon: Bot, label: "Agents" },
+                { value: "memory", icon: Database, label: "Memory" },
+                { value: "chat", icon: MessageSquare, label: "Chat" },
+              ] as const
+            ).map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <TabsTrigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="relative h-11 rounded-none border-b-2 border-transparent data-[state=active]:border-violet-500 data-[state=active]:text-violet-400 data-[state=active]:shadow-none px-4 gap-2 text-muted-foreground text-sm transition-colors"
+                >
+                  <Icon className="h-4 w-4" />
+                  <span className="hidden sm:inline">{tab.label}</span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
+
+        {/* ── VIEWS ─────────────────────────────────────────── */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <TabsContent value="dashboard" className="m-0 h-full">
+            <DashboardView onNavigate={setActiveTab} />
+          </TabsContent>
+          <TabsContent value="pipeline" className="m-0 h-full">
+            <PipelineView />
+          </TabsContent>
+          <TabsContent value="agents" className="m-0 h-full">
+            <AgentsView />
+          </TabsContent>
+          <TabsContent value="memory" className="m-0 h-full">
+            <MemoryView />
+          </TabsContent>
+          <TabsContent value="chat" className="m-0 h-full">
+            <ChatView />
+          </TabsContent>
+        </div>
+      </Tabs>
     </div>
   );
 }
 
 /* ================================================================
-   SIDEBAR
+   VIEW 1 — DASHBOARD
    ================================================================ */
 
-function Sidebar() {
-  const { currentView, setCurrentView, sidebarOpen, setSidebarOpen, systemStatus } = useAgentOSStore();
-
-  const navItems: { view: ViewType; icon: React.ElementType; label: string; badge?: number }[] = [
-    { view: "dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { view: "pipeline", icon: Activity, label: "Pipeline" },
-    { view: "chat", icon: MessageSquare, label: "Chat" },
-    { view: "projects", icon: FolderKanban, label: "Projects", badge: systemStatus?.stats.totalProjects },
-    { view: "logs", icon: ScrollText, label: "Logs" },
-  ];
-
-  return (
-    <>
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
-      <aside className={`fixed top-0 left-0 z-50 h-full bg-card border-r border-border flex flex-col transition-all duration-300 ${sidebarOpen ? "w-64" : "w-16"}`}>
-        <div className="flex items-center gap-3 p-4 border-b border-border">
-          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center flex-shrink-0">
-            <Brain className="h-5 w-5 text-white" />
-          </div>
-          {sidebarOpen && (
-            <div className="overflow-hidden">
-              <h1 className="text-sm font-bold tracking-tight">AgentOS</h1>
-              <p className="text-[10px] text-muted-foreground">Multi-Agent Platform</p>
-            </div>
-          )}
-          <Button variant="ghost" size="icon" className="ml-auto h-7 w-7" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        <nav className="flex-1 p-2 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = currentView === item.view;
-            return (
-              <button
-                key={item.view}
-                onClick={() => { setCurrentView(item.view); if (window.innerWidth < 768) setSidebarOpen(false); }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all ${isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                {sidebarOpen && (
-                  <>
-                    <span className="flex-1 text-left">{item.label}</span>
-                    {item.badge !== undefined && item.badge > 0 && (
-                      <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{item.badge}</Badge>
-                    )}
-                  </>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {sidebarOpen && (
-          <div className="p-3 border-t border-border">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2 px-1">Agent Team</p>
-            <div className="grid grid-cols-5 gap-1.5">
-              {AGENTS_CONFIG.map((agent) => {
-                const Icon = agent.icon;
-                return (
-                  <TooltipWrapper key={agent.id} text={`${agent.name} — ${agent.role}`}>
-                    <div className="h-8 w-8 rounded-md flex items-center justify-center transition-colors hover:scale-110" style={{ backgroundColor: `${agent.color}20` }}>
-                      <Icon className="h-3.5 w-3.5" style={{ color: agent.color }} />
-                    </div>
-                  </TooltipWrapper>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </aside>
-    </>
-  );
-}
-
-/* ================================================================
-   DASHBOARD VIEW
-   ================================================================ */
-
-function DashboardView() {
-  const { systemStatus, setCurrentView, setSystemStatus } = useAgentOSStore();
-  const stats = systemStatus?.stats;
+function DashboardView({ onNavigate }: { onNavigate: (tab: string) => void }) {
+  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/status", { signal: controller.signal })
-      .then((res) => res.json())
-      .then((json: Record<string, Record<string, unknown>>) => {
-        const d = json.data as Record<string, unknown>;
-        const s = d.stats as Record<string, Record<string, number>>;
-        const ra = d.recentActivity as Record<string, AgentRun[]>;
-        setSystemStatus({
-          status: d.health as string,
-          timestamp: d.timestamp as string,
-          stats: {
+      .then((r) => r.json())
+      .then((json) => {
+        const d = json.data;
+        if (d) {
+          const s = d.stats;
+          const completed = s?.tasks?.completed ?? 0;
+          const failed = s?.tasks?.failed ?? 0;
+          const total = completed + failed;
+          setStats({
             totalProjects: s?.projects?.total ?? 0,
             totalTasks: s?.tasks?.total ?? 0,
-            completedTasks: s?.tasks?.completed ?? 0,
-            failedTasks: s?.tasks?.failed ?? 0,
+            completedTasks: completed,
+            failedTasks: failed,
             totalAgentRuns: s?.agents?.totalRuns ?? 0,
-            recentActivity: (ra?.agentRuns || []).map((r) => ({ ...r, projectId: "", taskId: "", input: null, output: null, error: null, order: 0, updatedAt: r.createdAt })),
-          },
-        });
+            activeRuns: s?.agents?.activeRuns ?? 0,
+            totalSessions: s?.chat?.totalSessions ?? 0,
+            successRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+          });
+        }
       })
-      .catch(() => { /* ignore */ });
-    return () => { controller.abort(); };
-  }, [setSystemStatus]);
+      .catch(() => {})
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, []);
 
   const statCards = [
-    { label: "Total Projects", value: stats?.totalProjects ?? 0, icon: FolderKanban, color: "text-violet-400" },
-    { label: "Total Tasks", value: stats?.totalTasks ?? 0, icon: BarChart3, color: "text-amber-400" },
-    { label: "Completed", value: stats?.completedTasks ?? 0, icon: CheckCircle2, color: "text-emerald-400" },
-    { label: "Failed", value: stats?.failedTasks ?? 0, icon: XCircle, color: "text-red-400" },
-    { label: "Agent Runs", value: stats?.totalAgentRuns ?? 0, icon: Zap, color: "text-cyan-400" },
+    {
+      label: "Total Pipelines",
+      value: stats?.totalProjects ?? 0,
+      icon: Activity,
+      color: "text-violet-400",
+      bg: "bg-violet-500/10",
+    },
+    {
+      label: "Active Agents",
+      value: stats?.activeRuns ?? 3,
+      icon: Bot,
+      color: "text-cyan-400",
+      bg: "bg-cyan-500/10",
+    },
+    {
+      label: "Memory Docs",
+      value: stats?.totalSessions ?? 0,
+      icon: Database,
+      color: "text-amber-400",
+      bg: "bg-amber-500/10",
+    },
+    {
+      label: "Success Rate",
+      value: stats ? `${stats.successRate}%` : "—",
+      icon: CheckCircle2,
+      color: "text-emerald-400",
+      bg: "bg-emerald-500/10",
+    },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Hero Banner */}
-      <div className="relative rounded-2xl overflow-hidden">
-        <div className="absolute inset-0">
-          <img src="/agentos-hero.png" alt="AgentOS" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/80 to-transparent" />
-        </div>
-        <div className="relative p-6 md:p-8 flex flex-col justify-center min-h-[160px]">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-              <Brain className="h-4 w-4 text-white" />
-            </div>
-            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">AgentOS</span>
-          </div>
-          <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Multi-Agent AI Platform</h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-lg">Deploy intelligent agent teams — CEO, PM, Developer, QA, DevOps — to collaborate on complex tasks autonomously.</p>
-          <div className="mt-4 flex gap-2">
-            <Button onClick={() => setCurrentView("pipeline")} className="gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white">
-              <Play className="h-4 w-4" /> Run Pipeline
-            </Button>
-            <Button variant="outline" onClick={() => setCurrentView("chat")} className="gap-2">
-              <MessageSquare className="h-4 w-4" /> Chat
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        {statCards.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={stat.label} className="bg-card/50 backdrop-blur">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-secondary/50 flex items-center justify-center">
-                    <Icon className={`h-5 w-5 ${stat.color}`} />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{stat.value}</p>
-                    <p className="text-[11px] text-muted-foreground">{stat.label}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Pipeline Overview */}
-      <Card className="bg-card/50 backdrop-blur">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Activity className="h-4 w-4 text-violet-400" /> Agent Pipeline</CardTitle>
-          <CardDescription>Sequential task execution flow: CEO → PM → Developer → QA → DevOps</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-2 overflow-x-auto pb-2">
-            {AGENTS_CONFIG.map((agent, idx) => {
-              const Icon = agent.icon;
-              return (
-                <React.Fragment key={agent.id}>
-                  <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border ${agent.borderClass} ${agent.bgClass} min-w-[140px]`}>
-                    <Icon className={`h-5 w-5 ${agent.textClass}`} />
+    <ScrollArea className="h-full">
+      <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
+        {/* Stat Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          {statCards.map((stat) => {
+            const Icon = stat.icon;
+            return loading ? (
+              <Skeleton key={stat.label} className="h-24 rounded-xl" />
+            ) : (
+              <Card
+                key={stat.label}
+                className="bg-card/60 backdrop-blur border-border/50"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-xs font-semibold">{agent.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{agent.role}</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        {stat.label}
+                      </p>
+                      <p className="text-2xl font-bold mt-1">{stat.value}</p>
+                    </div>
+                    <div
+                      className={`h-9 w-9 rounded-lg ${stat.bg} flex items-center justify-center`}
+                    >
+                      <Icon className={`h-4.5 w-4.5 ${stat.color}`} />
                     </div>
                   </div>
-                  {idx < AGENTS_CONFIG.length - 1 && <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
 
-      {/* Recent Activity & Quick Actions */}
-      <div className="grid md:grid-cols-2 gap-4">
-        <Card className="bg-card/50 backdrop-blur">
+        {/* Pipeline Visualization */}
+        <Card className="bg-card/60 backdrop-blur border-border/50">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><Clock className="h-4 w-4 text-amber-400" /> Recent Activity</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Zap className="h-4 w-4 text-violet-400" />
+              Agent Pipeline Flow
+            </CardTitle>
+            <CardDescription>
+              Sequential multi-agent execution: CEO → Developer → QA
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {(!stats?.recentActivity || stats.recentActivity.length === 0) ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">No recent activity</p>
-                <p className="text-xs">Run a pipeline to see agent activity</p>
-              </div>
-            ) : (
-              <div className="space-y-3 max-h-64 overflow-y-auto">
-                {stats.recentActivity.slice(0, 8).map((run) => {
-                  const config = getAgentConfig(run.agentType);
-                  return (
-                    <div key={run.id} className="flex items-center gap-3 py-2 border-b border-border/50 last:border-0">
-                      <StatusIcon status={run.status} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{config?.name || run.agentName}</p>
-                        <p className="text-[10px] text-muted-foreground">{timeAgo(run.createdAt)} · {formatDuration(run.duration)}</p>
+            <div className="flex items-center gap-2 md:gap-4 overflow-x-auto pb-2">
+              {AGENTS.map((agent, idx) => {
+                const Icon = agent.icon;
+                return (
+                  <React.Fragment key={agent.id}>
+                    <div
+                      className={`flex items-center gap-2.5 px-4 py-3 rounded-xl border ${agent.borderClass} ${agent.bgClass} min-w-[130px] flex-shrink-0`}
+                    >
+                      <div
+                        className="h-8 w-8 rounded-lg flex items-center justify-center"
+                        style={{ backgroundColor: `${agent.color}25` }}
+                      >
+                        <Icon className="h-4 w-4" style={{ color: agent.color }} />
                       </div>
-                      <StatusBadge status={run.status} />
+                      <div>
+                        <p className="text-xs font-semibold">{agent.name}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {agent.role}
+                        </p>
+                      </div>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    {idx < AGENTS.length - 1 && (
+                      <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 hidden sm:block" />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 backdrop-blur">
+        {/* Quick Actions */}
+        <Card className="bg-card/60 backdrop-blur border-border/50">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2"><Zap className="h-4 w-4 text-cyan-400" /> Quick Actions</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Play className="h-4 w-4 text-cyan-400" />
+              Quick Actions
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { view: "pipeline" as ViewType, icon: Play, color: "text-violet-400", title: "Run Pipeline", desc: "Execute full agent team" },
-              { view: "chat" as ViewType, icon: MessageSquare, color: "text-amber-400", title: "Chat with Agents", desc: "Interactive conversation" },
-              { view: "projects" as ViewType, icon: FolderKanban, color: "text-emerald-400", title: "Manage Projects", desc: "View and create projects" },
-              { view: "logs" as ViewType, icon: ScrollText, color: "text-red-400", title: "View Logs", desc: "Agent execution logs" },
-            ].map((action) => {
-              const Icon = action.icon;
-              return (
-                <Button key={action.view} variant="outline" className="w-full justify-start gap-3 h-12 border-dashed" onClick={() => setCurrentView(action.view)}>
-                  <Icon className={`h-4 w-4 ${action.color}`} />
-                  <div className="text-left">
-                    <p className="text-sm font-medium">{action.title}</p>
-                    <p className="text-[10px] text-muted-foreground">{action.desc}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 ml-auto text-muted-foreground" />
-                </Button>
-              );
-            })}
+          <CardContent>
+            <div className="grid sm:grid-cols-2 gap-3">
+              <Button
+                variant="outline"
+                className="h-14 justify-start gap-3 border-dashed hover:border-violet-500/50 hover:bg-violet-500/5"
+                onClick={() => onNavigate("pipeline")}
+              >
+                <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
+                  <Play className="h-4 w-4 text-white" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium">Run Pipeline</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Execute full agent team
+                  </p>
+                </div>
+              </Button>
+              <Button
+                variant="outline"
+                className="h-14 justify-start gap-3 border-dashed hover:border-violet-500/50 hover:bg-violet-500/5"
+                onClick={() => onNavigate("chat")}
+              >
+                <div className="h-9 w-9 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                  <MessageSquare className="h-4 w-4 text-amber-400" />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-medium">Chat with Agents</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Interactive conversation
+                  </p>
+                </div>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
-    </div>
+    </ScrollArea>
+  );
+}
+
+/* ================================================================
+   VIEW 2 — PIPELINE
+   ================================================================ */
+
+function PipelineView() {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("high");
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [pipelineRuns, setPipelineRuns] = useState<AgentRun[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Simulated progress while running
+  useEffect(() => {
+    if (!running) return;
+    const interval = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 90) return p;
+        return p + Math.random() * 15;
+      });
+    }, 800);
+    return () => clearInterval(interval);
+  }, [running]);
+
+  const handleRun = async () => {
+    if (!title.trim() || running) return;
+    setRunning(true);
+    setProgress(0);
+    setPipelineRuns([]);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/run-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+        }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setError(json.error || "Pipeline execution failed");
+        setProgress(100);
+        return;
+      }
+
+      const data = json.data;
+      if (data?.agentRuns) {
+        setPipelineRuns(data.agentRuns);
+      }
+      setProgress(100);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to connect to the backend"
+      );
+      setProgress(100);
+    } finally {
+      setRunning(false);
+      setTitle("");
+      setDescription("");
+    }
+  };
+
+  const completedCount = pipelineRuns.filter(
+    (r) => r.status === "completed"
+  ).length;
+
+  return (
+    <ScrollArea className="h-full">
+      <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">
+            Pipeline
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Run your multi-agent pipeline to process tasks autonomously
+          </p>
+        </div>
+
+        <div className="grid lg:grid-cols-[380px_1fr] gap-6">
+          {/* ── Left: Form ── */}
+          <Card className="bg-card/60 backdrop-blur border-border/50">
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Terminal className="h-4 w-4 text-violet-400" />
+                New Pipeline Run
+              </CardTitle>
+              <CardDescription>Describe the task for your agent team</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Task Title
+                </label>
+                <Input
+                  placeholder="e.g., Build a REST API for task management"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={running}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Description
+                </label>
+                <Textarea
+                  placeholder="Provide detailed requirements for the agent team..."
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={5}
+                  disabled={running}
+                  className="resize-none"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Priority
+                </label>
+                <Select value={priority} onValueChange={setPriority} disabled={running}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-red-300">{error}</p>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRun}
+                disabled={running || !title.trim()}
+                className="w-full gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white shadow-lg shadow-violet-500/20"
+              >
+                {running ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Running Pipeline...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4" />
+                    Execute Pipeline
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* ── Right: Results ── */}
+          <Card className="bg-card/60 backdrop-blur border-border/50">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-emerald-400" />
+                    Pipeline Execution
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {running
+                      ? "Agents are processing your task..."
+                      : pipelineRuns.length > 0
+                        ? `Completed: ${completedCount}/${pipelineRuns.length} agents`
+                        : "Configure a task and execute the pipeline"}
+                  </CardDescription>
+                </div>
+                {running && (
+                  <Badge className="bg-violet-500/20 text-violet-400 border-violet-500/30 animate-pulse gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> Running
+                  </Badge>
+                )}
+              </div>
+              {running && (
+                <Progress value={progress} className="mt-3 h-1.5" />
+              )}
+            </CardHeader>
+            <CardContent>
+              {/* Empty state */}
+              {pipelineRuns.length === 0 && !running && !error && (
+                <div className="text-center py-16 text-muted-foreground">
+                  <Bot className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm font-medium">No pipeline runs yet</p>
+                  <p className="text-xs mt-1">
+                    Submit a task to see the agent pipeline in action
+                  </p>
+                </div>
+              )}
+
+              {/* Loading skeletons */}
+              {running && pipelineRuns.length === 0 && (
+                <div className="space-y-4 py-4">
+                  {AGENTS.map((agent) => (
+                    <div key={agent.id} className="flex items-center gap-4">
+                      <Skeleton className="h-10 w-10 rounded-lg" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-20" />
+                      </div>
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Agent run results */}
+              {pipelineRuns.length > 0 && (
+                <div className="space-y-3">
+                  {pipelineRuns.map((run, idx) => (
+                    <AgentRunCard key={run.id} run={run} index={idx} />
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -383,50 +812,79 @@ function DashboardView() {
    PIPELINE RUN CARD
    ================================================================ */
 
-function PipelineRunCard({ run, index }: { run: AgentRun; index: number }) {
+function AgentRunCard({
+  run,
+  index,
+}: {
+  run: AgentRun;
+  index: number;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const { setOutputViewerOpen, setViewingOutput } = useAgentOSStore();
-  const config = getAgentConfig(run.agentType);
+  const config = getAgentDef(run.agentType);
   const Icon = config?.icon || Bot;
 
   return (
-    <div className={`rounded-xl border ${config?.borderClass || "border-border"} ${config?.bgClass || "bg-card"} overflow-hidden transition-all`}>
-      <div className="flex items-center gap-3 p-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-        <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground w-6">{index + 1}.</div>
-        <div className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${config?.color}25` }}>
-          <Icon className="h-4 w-4" style={{ color: config?.color }} />
+    <div
+      className={`rounded-xl border ${config?.borderClass || "border-border"} ${config?.bgClass || "bg-card"} overflow-hidden transition-all`}
+    >
+      <div
+        className="flex items-center gap-3 p-4 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground w-6">
+          {index + 1}.
+        </div>
+        <div
+          className="h-9 w-9 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ backgroundColor: `${config?.color || "#888"}25` }}
+        >
+          <Icon className="h-4 w-4" style={{ color: config?.color || "#888" }} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold">{config?.name || run.agentName}</p>
             <StatusBadge status={run.status} />
           </div>
-          <p className="text-[10px] text-muted-foreground">{config?.role} · {formatDuration(run.duration)}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {config?.role || "Agent"} · {formatDuration(run.duration)}
+          </p>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7 flex-shrink-0" onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}>
-          <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
-        </Button>
+        <button className="h-7 w-7 flex items-center justify-center rounded-md hover:bg-accent flex-shrink-0">
+          <ChevronRight
+            className={`h-4 w-4 transition-transform text-muted-foreground ${expanded ? "rotate-90" : ""}`}
+          />
+        </button>
       </div>
       {expanded && (
         <div className="border-t border-border/50 px-4 py-3 space-y-3">
           {run.error && (
             <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-              <p className="text-xs font-medium text-red-400 flex items-center gap-1.5"><AlertCircle className="h-3 w-3" /> Error</p>
+              <p className="text-xs font-medium text-red-400 flex items-center gap-1.5">
+                <AlertCircle className="h-3 w-3" /> Error
+              </p>
               <p className="text-xs text-red-300/80 mt-1">{run.error}</p>
             </div>
           )}
           {run.output && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Output</p>
-                <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1 px-2" onClick={() => { setViewingOutput(run); setOutputViewerOpen(true); }}>
-                  <Eye className="h-3 w-3" /> View Full
-                </Button>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Output
+                </p>
+                <Badge variant="outline" className="text-[10px] h-5 px-1.5">
+                  <Eye className="h-2.5 w-2.5 mr-1" />
+                  {run.output.length} chars
+                </Badge>
               </div>
-              <div className="p-3 rounded-lg bg-background/50 text-xs text-muted-foreground max-h-40 overflow-y-auto font-mono whitespace-pre-wrap">
-                {(run.output?.length ?? 0) > 300 ? run.output!.substring(0, 300) + "..." : (run.output ?? "")}
+              <div className="p-3 rounded-lg bg-background/50 text-xs text-muted-foreground max-h-48 overflow-y-auto font-mono whitespace-pre-wrap leading-relaxed">
+                {truncate(run.output, 500)}
               </div>
             </div>
+          )}
+          {!run.error && !run.output && (
+            <p className="text-xs text-muted-foreground italic">
+              No output available for this agent run.
+            </p>
           )}
         </div>
       )}
@@ -435,138 +893,432 @@ function PipelineRunCard({ run, index }: { run: AgentRun; index: number }) {
 }
 
 /* ================================================================
-   PIPELINE VIEW
+   VIEW 3 — AGENTS
    ================================================================ */
 
-function PipelineView() {
-  const { pipelineRuns, setPipelineRuns, isPipelineRunning, setIsPipelineRunning, pipelineProgress, setPipelineProgress } = useAgentOSStore();
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+function AgentsView() {
+  const [agentsData, setAgentsData] = useState<AgentDef[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AgentDef | null>(null);
 
-  const handleRunPipeline = async () => {
-    if (!title.trim()) return;
-    setIsPipelineRunning(true);
-    setPipelineRuns([]);
-    setPipelineProgress(0);
-    try {
-      const res = await fetch("/api/run-agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title.trim(), description: description.trim() }),
-      });
-      const json = await res.json();
-      const runData = json.data as Record<string, unknown> | undefined;
-      if (runData?.agentRuns) {
-        setPipelineRuns(runData.agentRuns as AgentRun[]);
-        setPipelineProgress(100);
-      }
-    } catch (err) {
-      console.error("Pipeline error:", err);
-    } finally {
-      setIsPipelineRunning(false);
-      setTitle("");
-      setDescription("");
-    }
-  };
+  useEffect(() => {
+    const controller = new AbortController();
+    // Try to fetch from orchestrator endpoint; fall back to client-side config
+    fetch("/api/orchestrator/agents", { signal: controller.signal })
+      .then((r) => {
+        if (!r.ok) throw new Error("Not available");
+        return r.json();
+      })
+      .then((json) => {
+        if (json.data && Array.isArray(json.data)) {
+          // Merge API data with client-side config for icons/colors
+          const merged = json.data.map((a: Record<string, unknown>) => {
+            const def = getAgentDef(a.id as string);
+            return def || { ...a, icon: Bot, color: "#888", bgClass: "bg-secondary", textClass: "text-muted-foreground", borderClass: "border-border" };
+          });
+          setAgentsData(merged);
+        } else {
+          setAgentsData(AGENTS);
+        }
+      })
+      .catch(() => {
+        // Use local agent definitions as fallback
+        setAgentsData(AGENTS);
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, []);
 
-  const completedCount = pipelineRuns.filter(r => r.status === "completed").length;
+  if (loading) {
+    return (
+      <ScrollArea className="h-full">
+        <div className="p-4 md:p-6 max-w-6xl mx-auto">
+          <Skeleton className="h-8 w-32 mb-6" />
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-56 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </ScrollArea>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Pipeline</h2>
-        <p className="text-sm text-muted-foreground">Run your multi-agent pipeline to process tasks</p>
-      </div>
+    <ScrollArea className="h-full">
+      <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">
+            Agent Team
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            View and manage your AI agent workforce
+          </p>
+        </div>
 
-      <div className="grid lg:grid-cols-[380px_1fr] gap-6">
-        <Card className="bg-card/50 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2"><Terminal className="h-4 w-4 text-violet-400" /> New Pipeline Run</CardTitle>
-            <CardDescription>Describe the task for your agent team</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Task Title</label>
-              <Input placeholder="e.g., Build a REST API for task management" value={title} onChange={(e) => setTitle(e.target.value)} disabled={isPipelineRunning} />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Description</label>
-              <Textarea placeholder="Provide detailed requirements for the agent team..." value={description} onChange={(e) => setDescription(e.target.value)} rows={5} disabled={isPipelineRunning} className="resize-none" />
-            </div>
-            <Button onClick={handleRunPipeline} disabled={isPipelineRunning || !title.trim()} className="w-full gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white">
-              {isPipelineRunning ? (<><Loader2 className="h-4 w-4 animate-spin" /> Running Pipeline...</>) : (<><Play className="h-4 w-4" /> Execute Pipeline</>)}
-            </Button>
-          </CardContent>
-        </Card>
+        {error && (
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-red-300">{error}</p>
+          </div>
+        )}
 
-        <Card className="bg-card/50 backdrop-blur">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2"><Activity className="h-4 w-4 text-emerald-400" /> Pipeline Execution</CardTitle>
-                <CardDescription className="mt-1">
-                  {isPipelineRunning ? "Agents are processing your task..." : pipelineRuns.length > 0 ? `Completed: ${completedCount}/${pipelineRuns.length} agents` : "Configure a task and execute the pipeline"}
-                </CardDescription>
-              </div>
-              {isPipelineRunning && <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse"><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Running</Badge>}
-            </div>
-            {isPipelineRunning && <Progress value={pipelineProgress} className="mt-2 h-1.5" />}
-          </CardHeader>
-          <CardContent>
-            {pipelineRuns.length === 0 && !isPipelineRunning ? (
-              <div className="text-center py-16 text-muted-foreground">
-                <Bot className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">No pipeline runs yet</p>
-                <p className="text-xs mt-1">Submit a task to see the agent pipeline in action</p>
-              </div>
-            ) : isPipelineRunning && pipelineRuns.length === 0 ? (
-              <div className="space-y-4 py-8">
-                {AGENTS_CONFIG.map((agent) => (
-                  <div key={agent.id} className="flex items-center gap-4 animate-pulse">
-                    <Skeleton className="h-10 w-10 rounded-lg" />
-                    <div className="flex-1"><Skeleton className="h-4 w-32 mb-1.5" /><Skeleton className="h-3 w-20" /></div>
-                    <Skeleton className="h-5 w-16 rounded-full" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(agentsData || AGENTS).map((agent) => {
+            const Icon = agent.icon;
+            return (
+              <Card
+                key={agent.id}
+                className={`bg-card/60 backdrop-blur border-border/50 hover:border-opacity-80 transition-all cursor-pointer group ${selectedAgent?.id === agent.id ? "ring-2 ring-violet-500/50" : ""}`}
+                onClick={() =>
+                  setSelectedAgent(
+                    selectedAgent?.id === agent.id ? null : agent
+                  )
+                }
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="h-10 w-10 rounded-xl flex items-center justify-center shadow-lg"
+                        style={{ backgroundColor: `${agent.color}25` }}
+                      >
+                        <Icon
+                          className="h-5 w-5"
+                          style={{ color: agent.color }}
+                        />
+                      </div>
+                      <div>
+                        <CardTitle className="text-sm">{agent.name}</CardTitle>
+                        <CardDescription className="text-[10px]">
+                          {agent.role}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <StatusBadge status="available" />
                   </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {pipelineRuns.map((run, idx) => <PipelineRunCard key={run.id} run={run} index={idx} />)}
-              </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {agent.description}
+                  </p>
+                  <div className="pt-2 border-t border-border/50">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
+                      System Prompt
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/70 font-mono leading-relaxed">
+                      {truncate(agent.systemPrompt, 120)}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Agent Detail Dialog */}
+        <Dialog
+          open={selectedAgent !== null}
+          onOpenChange={(open) => !open && setSelectedAgent(null)}
+        >
+          <DialogContent className="max-w-lg">
+            {selectedAgent && (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-3">
+                    <div
+                      className="h-10 w-10 rounded-xl flex items-center justify-center"
+                      style={{ backgroundColor: `${selectedAgent.color}25` }}
+                    >
+                      {React.createElement(selectedAgent.icon, {
+                        className: "h-5 w-5",
+                        style: { color: selectedAgent.color },
+                      })}
+                    </div>
+                    {selectedAgent.name}
+                  </DialogTitle>
+                  <DialogDescription>{selectedAgent.role}</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      Description
+                    </p>
+                    <p className="text-sm">{selectedAgent.description}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">
+                      System Prompt
+                    </p>
+                    <div className="p-3 rounded-lg bg-muted/50 text-xs font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                      {selectedAgent.systemPrompt}
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
       </div>
-    </div>
+    </ScrollArea>
   );
 }
 
 /* ================================================================
-   CHAT VIEW
+   VIEW 4 — MEMORY
+   ================================================================ */
+
+function MemoryView() {
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<
+    Array<{
+      id: string;
+      content: string;
+      score: number;
+      source: string;
+    }>
+  >([]);
+  const [totalDocs, setTotalDocs] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Load total docs count
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/status", { signal: controller.signal })
+      .then((r) => r.json())
+      .then((json) => {
+        const d = json.data;
+        if (d) {
+          setTotalDocs(
+            (d.stats?.agents?.totalRuns ?? 0) +
+              (d.stats?.chat?.totalSessions ?? 0)
+          );
+        }
+      })
+      .catch(() => {})
+      .finally(() => {});
+    return () => controller.abort();
+  }, []);
+
+  const handleSearch = async () => {
+    if (!query.trim() || searching) return;
+    setSearching(true);
+    setError(null);
+    setResults([]);
+
+    try {
+      const res = await fetch("/api/orchestrator/memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query.trim() }),
+      });
+
+      if (!res.ok) throw new Error("Memory service not available");
+
+      const json = await res.json();
+      if (json.data?.results) {
+        setResults(json.data.results);
+      } else {
+        setResults([]);
+      }
+    } catch (err) {
+      setError(
+        "Memory service is not available yet. This feature will be enabled in a future update."
+      );
+      // Show mock results for demo
+      setResults([
+        {
+          id: "demo-1",
+          content:
+            "Pipeline run: Build a REST API. CEO decomposed into strategic goals. Developer planned architecture with Express.js and SQLite.",
+          score: 0.92,
+          source: "pipeline-run-001",
+        },
+        {
+          id: "demo-2",
+          content:
+            "Chat session discussing microservices architecture. Agent recommended Docker containerization approach.",
+          score: 0.78,
+          source: "chat-session-002",
+        },
+        {
+          id: "demo-3",
+          content:
+            "QA analysis found 3 potential edge cases in authentication flow. Recommended rate limiting and input validation.",
+          score: 0.65,
+          source: "pipeline-run-003",
+        },
+      ]);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleSearch();
+    }
+  };
+
+  return (
+    <ScrollArea className="h-full">
+      <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">
+            Memory
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Search across all agent outputs, pipeline results, and knowledge
+            base
+          </p>
+        </div>
+
+        {/* Stats */}
+        <Card className="bg-card/60 backdrop-blur border-border/50">
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
+              <Database className="h-5 w-5 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{totalDocs ?? "—"}</p>
+              <p className="text-xs text-muted-foreground">
+                Documents in knowledge base
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Search */}
+        <Card className="bg-card/60 backdrop-blur border-border/50">
+          <CardContent className="p-4 space-y-3">
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Query Memory
+            </label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search across all agent outputs and knowledge..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={searching}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleSearch}
+                disabled={searching || !query.trim()}
+                className="gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white"
+              >
+                {searching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Search</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Results */}
+        {error && (
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-amber-300">{error}</p>
+          </div>
+        )}
+
+        {results.length > 0 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground font-medium">
+              {results.length} result{results.length > 1 ? "s" : ""} found
+            </p>
+            {results.map((result) => (
+              <Card
+                key={result.id}
+                className="bg-card/60 backdrop-blur border-border/50"
+              >
+                <CardContent className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] h-5 px-1.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    >
+                      Score: {(result.score * 100).toFixed(0)}%
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {result.source}
+                    </span>
+                  </div>
+                  <p className="text-sm text-foreground/90 leading-relaxed">
+                    {result.content}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {!error && results.length === 0 && !searching && (
+          <div className="text-center py-16 text-muted-foreground">
+            <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+            <p className="text-sm font-medium">Search the knowledge base</p>
+            <p className="text-xs mt-1">
+              Enter a query to find relevant documents and agent outputs
+            </p>
+          </div>
+        )}
+
+        {searching && (
+          <div className="space-y-4 py-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-5 w-20" />
+                <Skeleton className="h-16 w-full rounded-xl" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </ScrollArea>
+  );
+}
+
+/* ================================================================
+   VIEW 5 — CHAT
    ================================================================ */
 
 function ChatView() {
-  const { currentSession, setCurrentSession, chatSessions, setChatSessions } = useAgentOSStore();
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Fetch sessions on mount
+  useEffect(() => {
+    fetchSessions();
+  }, []);
 
   const fetchSessions = async () => {
     try {
       const res = await fetch("/api/chat/sessions");
       const json = await res.json();
-      const sessions = json.data || [];
-      setChatSessions(sessions);
-      if (sessions.length > 0 && !currentSession) {
-        setCurrentSession(sessions[0]);
-        loadMessages(sessions[0].id);
+      const s: ChatSession[] = json.data || [];
+      setSessions(s);
+      if (s.length > 0) {
+        setCurrentSessionId(s[0].id);
+        loadMessages(s[0].id);
       }
-    } catch { /* ignore */ }
+    } catch {
+      // Graceful fallback — show empty state
+    }
   };
-
-  useEffect(() => { fetchSessions(); }, []);
 
   const loadMessages = async (sessionId: string) => {
     try {
@@ -575,139 +1327,353 @@ function ChatView() {
       const session = json.data;
       if (session?.messages) {
         setMessages(session.messages);
-        setCurrentSession(session);
+      } else {
+        setMessages([]);
       }
-    } catch { /* ignore */ }
+    } catch {
+      setMessages([]);
+    }
   };
 
   const handleSelectSession = (session: ChatSession) => {
-    setCurrentSession(session);
+    setCurrentSessionId(session.id);
     loadMessages(session.id);
+    if (window.innerWidth < 768) setSidebarOpen(false);
   };
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   const createNewSession = async () => {
     try {
       const res = await fetch("/api/chat/sessions", { method: "POST" });
       const json = await res.json();
-      const session = json.data;
-      setChatSessions(prev => [session, ...prev]);
-      setCurrentSession(session);
+      const session: ChatSession = json.data;
+      setSessions((prev) => [session, ...prev]);
+      setCurrentSessionId(session.id);
       setMessages([]);
-    } catch { /* ignore */ }
+    } catch {
+      // Fallback — create local session
+      const fakeSession: ChatSession = {
+        id: `local-${Date.now()}`,
+        title: "New Conversation",
+        status: "active",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setSessions((prev) => [fakeSession, ...prev]);
+      setCurrentSessionId(fakeSession.id);
+      setMessages([]);
+    }
   };
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
     const message = input.trim();
     setInput("");
     setIsLoading(true);
+
+    const tempSessionId =
+      currentSessionId || `local-${Date.now()}`;
+
+    // Optimistic UI — show user message immediately
+    const userMsg: ChatMessage = {
+      id: `u-${Date.now()}`,
+      sessionId: tempSessionId,
+      role: "user",
+      content: message,
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, sessionId: currentSession?.id, agentType: selectedAgent }),
+        body: JSON.stringify({
+          message,
+          sessionId: currentSessionId,
+          agentType: selectedAgent,
+        }),
       });
       const json = await res.json();
-      const chatData = json.data as Record<string, unknown> | undefined;
-      const sid = chatData?.sessionId as string || currentSession?.id || "";
-      const responseMessage = (chatData?.message as string) || "No response.";
-      const userMsg: ChatMessage = { id: `u-${Date.now()}`, sessionId: sid, role: "user", content: message, createdAt: new Date().toISOString() };
-      const assistantMsg: ChatMessage = { id: `a-${Date.now()}`, sessionId: sid, role: "assistant", content: responseMessage, createdAt: new Date().toISOString() };
-      setMessages(prev => [...prev, userMsg, assistantMsg]);
-      // If API created a new session, update the current session in the store
-      if (sid && currentSession?.id !== sid) {
-        setCurrentSession({ ...currentSession!, id: sid, messages: [userMsg, assistantMsg] });
+      const data = json.data;
+
+      const assistantMsg: ChatMessage = {
+        id: `a-${Date.now()}`,
+        sessionId: data?.sessionId || tempSessionId,
+        role: "assistant",
+        content: data?.message || "I could not generate a response.",
+        agentType: data?.agentType || selectedAgent,
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Update session ID if a new one was created
+      if (data?.sessionId && data.sessionId !== currentSessionId) {
+        setCurrentSessionId(data.sessionId);
       }
-    } catch (err) {
-      console.error("Chat error:", err);
+    } catch {
+      const errorMsg: ChatMessage = {
+        id: `e-${Date.now()}`,
+        sessionId: tempSessionId,
+        role: "assistant",
+        content:
+          "Sorry, I couldn't connect to the backend. Please make sure the server is running.",
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
+
   return (
-    <div className="flex h-[calc(100vh-8rem)]">
-      <div className="w-64 border-r border-border flex flex-col flex-shrink-0 max-md:hidden">
-        <div className="p-3 border-b border-border">
-          <Button variant="outline" size="sm" className="w-full gap-2" onClick={createNewSession}><Plus className="h-3 w-3" /> New Chat</Button>
+    <div className="flex h-full">
+      {/* ── Session Sidebar ── */}
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`w-64 border-r border-border flex flex-col flex-shrink-0 bg-background transition-transform duration-200 z-50 ${
+          sidebarOpen
+            ? "translate-x-0 fixed md:relative md:translate-x-0"
+            : "-translate-x-full md:translate-x-0"
+        }`}
+      >
+        <div className="p-3 border-b border-border flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
+            onClick={createNewSession}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Chat
+          </Button>
         </div>
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
-            {chatSessions.map((session) => (
-              <button key={session.id} onClick={() => handleSelectSession(session)} className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${currentSession?.id === session.id ? "bg-primary text-primary-foreground" : "hover:bg-accent text-muted-foreground hover:text-foreground"}`}>
-                <p className="truncate font-medium">{session.title}</p>
-                <p className="text-[10px] opacity-70 mt-0.5">{timeAgo(session.createdAt)}</p>
+            {sessions.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                No conversations yet
+              </p>
+            )}
+            {sessions.map((session) => (
+              <button
+                key={session.id}
+                onClick={() => handleSelectSession(session)}
+                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors ${
+                  currentSessionId === session.id
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-3.5 w-3.5 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium text-xs">
+                      {session.title}
+                    </p>
+                    <p className="text-[10px] opacity-70 mt-0.5">
+                      {timeAgo(session.updatedAt)}
+                      {session.messageCount !== undefined &&
+                        ` · ${session.messageCount} msgs`}
+                    </p>
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         </ScrollArea>
-      </div>
+      </aside>
 
-      <div className="flex-1 flex flex-col">
+      {/* ── Chat Area ── */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Chat Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
-          <MessageSquare className="h-4 w-4 text-violet-400" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold">{currentSession?.title || "New Conversation"}</p>
-            <p className="text-[10px] text-muted-foreground">{selectedAgent ? `Talking to ${getAgentConfig(selectedAgent)?.name}` : "General assistant"}</p>
+          {/* Mobile sidebar toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 md:hidden"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <MessageSquare className="h-4 w-4" />
+          </Button>
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate">
+              {currentSession?.title || "New Conversation"}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {selectedAgent
+                ? `Talking to ${getAgentDef(selectedAgent)?.name || selectedAgent}`
+                : "General assistant"}
+            </p>
           </div>
+
+          {/* Agent Selector */}
           <div className="flex items-center gap-1">
-            {AGENTS_CONFIG.map((agent) => {
+            {AGENTS.map((agent) => {
               const Icon = agent.icon;
               return (
-                <TooltipWrapper key={agent.id} text={agent.name}>
-                  <button onClick={() => setSelectedAgent(selectedAgent === agent.id ? null : agent.id)} className={`h-7 w-7 rounded-md flex items-center justify-center transition-all ${selectedAgent === agent.id ? "ring-2 ring-offset-1 ring-offset-background opacity-100" : "opacity-50 hover:opacity-100"}`} style={{ backgroundColor: `${agent.color}20` }}>
-                    <Icon className="h-3 w-3" style={{ color: agent.color }} />
-                  </button>
-                </TooltipWrapper>
+                <button
+                  key={agent.id}
+                  onClick={() =>
+                    setSelectedAgent(
+                      selectedAgent === agent.id ? null : agent.id
+                    )
+                  }
+                  title={agent.name}
+                  className={`h-7 w-7 rounded-md flex items-center justify-center transition-all ${
+                    selectedAgent === agent.id
+                      ? "ring-2 ring-offset-1 ring-offset-background scale-110"
+                      : "opacity-40 hover:opacity-100"
+                  }`}
+                  style={{ backgroundColor: `${agent.color}20` }}
+                >
+                  <Icon
+                    className="h-3.5 w-3.5"
+                    style={{ color: agent.color }}
+                  />
+                </button>
               );
             })}
           </div>
         </div>
 
+        {/* Messages */}
         <ScrollArea className="flex-1 p-4">
           {messages.length === 0 ? (
             <div className="h-full flex items-center justify-center">
               <div className="text-center text-muted-foreground">
                 <Bot className="h-12 w-12 mx-auto mb-3 opacity-30" />
                 <p className="text-sm font-medium">Start a conversation</p>
-                <p className="text-xs mt-1">Ask anything or select an agent to get specialized help</p>
+                <p className="text-xs mt-1 max-w-xs mx-auto">
+                  Ask anything or select a specific agent to get specialized
+                  help
+                </p>
+                <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+                  {AGENTS.map((agent) => {
+                    const Icon = agent.icon;
+                    return (
+                      <button
+                        key={agent.id}
+                        onClick={() => setSelectedAgent(agent.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 text-[11px] text-muted-foreground hover:border-violet-500/50 hover:text-violet-400 transition-colors"
+                      >
+                        <Icon
+                          className="h-3 w-3"
+                          style={{ color: agent.color }}
+                        />
+                        {agent.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           ) : (
             <div className="space-y-4 max-w-3xl mx-auto">
               {messages.map((msg) => (
-                <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}>
+                <div
+                  key={msg.id}
+                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : ""}`}
+                >
                   {msg.role !== "user" && (
                     <div className="h-7 w-7 rounded-md bg-secondary flex items-center justify-center flex-shrink-0 mt-1">
-                      {msg.agentType ? React.createElement(getAgentConfig(msg.agentType)?.icon || Bot, { className: "h-3.5 w-3.5 text-muted-foreground" }) : <Bot className="h-3.5 w-3.5 text-muted-foreground" />}
+                      {msg.agentType && getAgentDef(msg.agentType) ? (
+                        React.createElement(
+                          getAgentDef(msg.agentType)!.icon,
+                          {
+                            className: "h-3.5 w-3.5",
+                            style: {
+                              color: getAgentDef(msg.agentType)!.color,
+                            },
+                          }
+                        )
+                      ) : (
+                        <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
                     </div>
                   )}
-                  <div className={`max-w-[75%] rounded-xl px-4 py-2.5 ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-card border border-border"}`}>
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                    <p className={`text-[10px] mt-1.5 ${msg.role === "user" ? "text-primary-foreground/60" : "text-muted-foreground"}`}>
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                      msg.role === "user"
+                        ? "bg-gradient-to-r from-violet-600 to-cyan-600 text-white"
+                        : "bg-card border border-border"
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                      {msg.content}
+                    </p>
+                    <p
+                      className={`text-[10px] mt-1.5 ${
+                        msg.role === "user"
+                          ? "text-white/60"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </p>
                   </div>
                   {msg.role === "user" && (
-                    <div className="h-7 w-7 rounded-md bg-primary/20 flex items-center justify-center flex-shrink-0 mt-1">
-                      <User className="h-3.5 w-3.5 text-primary" />
+                    <div className="h-7 w-7 rounded-md bg-violet-500/20 flex items-center justify-center flex-shrink-0 mt-1">
+                      <User className="h-3.5 w-3.5 text-violet-400" />
                     </div>
                   )}
                 </div>
               ))}
+              {isLoading && (
+                <div className="flex gap-3">
+                  <div className="h-7 w-7 rounded-md bg-secondary flex items-center justify-center flex-shrink-0">
+                    {selectedAgent && getAgentDef(selectedAgent) ? (
+                      React.createElement(
+                        getAgentDef(selectedAgent)!.icon,
+                        {
+                          className: "h-3.5 w-3.5 animate-spin",
+                          style: { color: getAgentDef(selectedAgent)!.color },
+                        }
+                      )
+                    ) : (
+                      <Bot className="h-3.5 w-3.5 text-muted-foreground animate-pulse" />
+                    )}
+                  </div>
+                  <div className="bg-card border border-border rounded-2xl px-4 py-3">
+                    <div className="flex gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:0ms]" />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:150ms]" />
+                      <span className="h-2 w-2 rounded-full bg-muted-foreground/40 animate-bounce [animation-delay:300ms]" />
+                    </div>
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
           )}
         </ScrollArea>
 
+        {/* Chat Input */}
         <div className="p-4 border-t border-border">
           <div className="max-w-3xl mx-auto flex gap-2">
             <Textarea
@@ -719,273 +1685,20 @@ function ChatView() {
               rows={1}
               className="min-h-[44px] max-h-32 resize-none"
             />
-            <Button onClick={handleSend} disabled={isLoading || !input.trim()} className="h-[44px] w-[44px] p-0 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white flex-shrink-0">
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            <Button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              className="h-[44px] w-[44px] p-0 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white flex-shrink-0 shadow-lg shadow-violet-500/20"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ================================================================
-   PROJECTS VIEW
-   ================================================================ */
-
-function ProjectsView() {
-  const { projects, setProjects, addProject } = useAgentOSStore();
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-
-  const fetchProjects = async () => {
-    try {
-      const res = await fetch("/api/projects");
-      const json = await res.json();
-      const projectData = (json.data || []) as Array<Record<string, unknown>>;
-      setProjects(projectData.map((p) => ({ id: p.id as string, name: p.name as string, description: p.description as string | null, status: p.status as Project["status"], createdAt: p.createdAt as string, updatedAt: p.updatedAt as string, _count: { tasks: (p.taskCount as number) ?? 0 } })));
-    
-    } catch { /* ignore */ }
-  };
-
-  useEffect(() => { fetchProjects(); }, []);
-
-  const handleCreateProject = async () => {
-    if (!newName.trim()) return;
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() || null }),
-      });
-      const json = await res.json();
-      const newProject = json.data as Record<string, unknown>;
-      addProject({ id: newProject.id as string, name: newProject.name as string, description: newProject.description as string | null, status: (newProject.status as Project["status"]) || "active", createdAt: newProject.createdAt as string, updatedAt: newProject.updatedAt as string, _count: { tasks: 0 } });
-      setDialogOpen(false);
-      setNewName("");
-      setNewDesc("");
-    } catch { /* ignore */ }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Projects</h2>
-          <p className="text-sm text-muted-foreground">Manage your projects and tasks</p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white"><Plus className="h-4 w-4" /> New Project</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Project</DialogTitle>
-              <DialogDescription>Add a new project to organize your tasks</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div>
-                <label className="text-xs font-medium mb-1.5 block">Project Name</label>
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="My Awesome Project" />
-              </div>
-              <div>
-                <label className="text-xs font-medium mb-1.5 block">Description</label>
-                <Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="What is this project about?" rows={3} />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-              <Button onClick={handleCreateProject} disabled={!newName.trim()}>Create</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {projects.length === 0 ? (
-        <Card className="bg-card/50 backdrop-blur">
-          <CardContent className="py-16 text-center text-muted-foreground">
-            <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">No projects yet</p>
-            <p className="text-xs mt-1">Create your first project to get started</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((project) => (
-            <Card key={project.id} className="bg-card/50 backdrop-blur hover:border-primary/30 transition-colors">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1 min-w-0">
-                    <CardTitle className="text-sm truncate">{project.name}</CardTitle>
-                    <CardDescription className="text-xs mt-1 line-clamp-2">{project.description || "No description"}</CardDescription>
-                  </div>
-                  <StatusBadge status={project.status} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                  <span>{project._count?.tasks || 0} tasks</span>
-                  <span>{timeAgo(project.createdAt)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ================================================================
-   LOGS VIEW
-   ================================================================ */
-
-function LogsView() {
-  const [logs, setLogs] = useState<AgentLog[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/logs?limit=100");
-      const json = await res.json();
-      setLogs((json.data || []) as AgentLog[]);
-    
-    } catch { /* ignore */ }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { fetchLogs(); }, []);
-
-  const getLevelColor = (level: string) => {
-    switch (level) {
-      case "error": return "text-red-400 bg-red-500/10 border-red-500/20";
-      case "warn": return "text-amber-400 bg-amber-500/10 border-amber-500/20";
-      case "info": return "text-blue-400 bg-blue-500/10 border-blue-500/20";
-      default: return "text-muted-foreground bg-secondary/50 border-border";
-    }
-  };
-
-  const getLevelIcon = (level: string) => {
-    switch (level) {
-      case "error": return <XCircle className="h-3 w-3 text-red-400" />;
-      case "warn": return <AlertCircle className="h-3 w-3 text-amber-400" />;
-      case "info": return <CheckCircle2 className="h-3 w-3 text-blue-400" />;
-      default: return <Clock className="h-3 w-3" />;
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Agent Logs</h2>
-          <p className="text-sm text-muted-foreground">Monitor agent execution and system events</p>
-        </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={fetchLogs}><ScrollText className="h-3 w-3" /> Refresh</Button>
-      </div>
-
-      <Card className="bg-card/50 backdrop-blur">
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="p-8 space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-5 w-14 rounded-full" />
-                  <Skeleton className="h-4 flex-1" />
-                  <Skeleton className="h-3 w-20" />
-                </div>
-              ))}
-            </div>
-          ) : logs.length === 0 ? (
-            <div className="py-16 text-center text-muted-foreground">
-              <ScrollText className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm font-medium">No logs yet</p>
-              <p className="text-xs mt-1">Run a pipeline to generate logs</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border/50">
-              {logs.map((log) => (
-                <div key={log.id} className="flex items-center gap-3 px-4 py-3 hover:bg-accent/30 transition-colors">
-                  {getLevelIcon(log.level)}
-                  <Badge variant="outline" className={`text-[10px] h-5 ${getLevelColor(log.level)}`}>{log.level.toUpperCase()}</Badge>
-                  <p className="flex-1 text-xs truncate">{log.message}</p>
-                  <span className="text-[10px] text-muted-foreground whitespace-nowrap">{timeAgo(log.createdAt)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-/* ================================================================
-   OUTPUT VIEWER SHEET
-   ================================================================ */
-
-function OutputViewer() {
-  const { outputViewerOpen, setOutputViewerOpen, viewingOutput } = useAgentOSStore();
-  const config = viewingOutput ? getAgentConfig(viewingOutput.agentType) : null;
-  const Icon = config?.icon || FileText;
-
-  return (
-    <Sheet open={outputViewerOpen} onOpenChange={setOutputViewerOpen}>
-      <SheetContent className="w-full md:max-w-2xl">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <Icon className="h-5 w-5" style={{ color: config?.color }} />
-            {config?.name || "Agent"} Output
-          </SheetTitle>
-        </SheetHeader>
-        <div className="mt-6">
-          {viewingOutput && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <StatusBadge status={viewingOutput.status} />
-                <span className="text-xs text-muted-foreground">Duration: {formatDuration(viewingOutput.duration)}</span>
-              </div>
-              {viewingOutput.output && (
-                <div className="p-4 rounded-lg bg-background border border-border font-mono text-xs whitespace-pre-wrap max-h-[70vh] overflow-y-auto">
-                  {viewingOutput.output}
-                </div>
-              )}
-              {viewingOutput.error && (
-                <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
-                  <p className="text-xs font-medium text-red-400">Error:</p>
-                  <p className="text-xs text-red-300 mt-1">{viewingOutput.error}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-/* ================================================================
-   MAIN PAGE
-   ================================================================ */
-
-export default function AgentOSPage() {
-  const { currentView, sidebarOpen } = useAgentOSStore();
-
-  return (
-    <div className="min-h-screen bg-background">
-      <Sidebar />
-      <main className={`transition-all duration-300 ${sidebarOpen ? "md:ml-64" : "md:ml-16"}`}>
-        <div className="p-4 md:p-6 lg:p-8 max-w-7xl mx-auto">
-          {currentView === "dashboard" && <DashboardView />}
-          {currentView === "pipeline" && <PipelineView />}
-          {currentView === "chat" && <ChatView />}
-          {currentView === "projects" && <ProjectsView />}
-          {currentView === "logs" && <LogsView />}
-        </div>
-      </main>
-      <OutputViewer />
     </div>
   );
 }

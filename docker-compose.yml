@@ -1,0 +1,109 @@
+# AgentOS v2 — Docker Compose
+# Complete local development and production environment
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f        # Follow logs
+#   docker compose down           # Stop all services
+#   docker compose build          # Rebuild all images
+
+version: "3.9"
+
+services:
+  # ── Next.js Frontend ─────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/agentos.db
+    volumes:
+      - frontend-data:/app/data
+    depends_on:
+      orchestrator:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentos
+
+  # ── FastAPI Orchestrator ─────────────────────────────────────
+  orchestrator:
+    build:
+      context: ./mini-services/agent-orchestrator
+      dockerfile: Dockerfile.python
+    ports:
+      - "3100:3100"
+    environment:
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      - HOST=0.0.0.0
+      - PORT=3100
+      - NEXTJS_URL=http://frontend:3000
+      - LLM_MODEL=deepseek-chat
+      - LLM_TIMEOUT=120
+      - LLM_MAX_RETRIES=3
+      - AGENT_PIPELINE=ceo,developer,qa
+      - MAX_PIPELINE_ERRORS=3
+      - CHROMA_PERSIST_DIR=/app/data/chroma
+      - CORS_ORIGINS=http://localhost:3000,http://frontend:3000
+    volumes:
+      - orchestrator-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - agentos
+
+  # ── PostgreSQL (for LangGraph checkpoints in production) ────
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=agentos
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-agentos_dev_2024}
+      - POSTGRES_DB=agentos
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentos -d agentos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - agentos
+
+  # ── Redis (session caching & pub/sub) ───────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - agentos
+
+volumes:
+  frontend-data:
+  orchestrator-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  agentos:
+    driver: bridge

@@ -55,6 +55,10 @@ local-*
 # Mini services
 mini-services/*/node_modules
 mini-services/*/*.log
+mini-services/agent-orchestrator/data/
+mini-services/agent-orchestrator/__pycache__/
+mini-services/agent-orchestrator/*.egg-info/
+mini-services/agent-orchestrator/.venv/
 
 # Skills
 /skills/
@@ -63,6 +67,11 @@ mini-services/*/*.log
 .accesslog
 .config
 .stats
+orchestrator.log
+agent-ctx/
+upload/
+download/
+worklog.md
 
 # IDE
 .vscode/
