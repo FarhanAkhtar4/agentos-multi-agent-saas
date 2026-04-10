@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 // GET /api/chat/sessions/[id] — Get chat session with messages
 export async function GET(
   _request: NextRequest,

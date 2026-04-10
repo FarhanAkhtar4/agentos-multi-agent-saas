@@ -1,0 +1,22 @@
+# AgentOS v2 — Cloudflare Pages Configuration
+# https://developers.cloudflare.com/pages/platform/build-configuration
+
+name = "agentos-v2"
+compatibility_date = "2025-04-10"
+
+# Cloudflare Pages build settings
+# These mirror what you set in the CF dashboard:
+#   Build command: npx prisma generate && npx next build
+#   Build output directory: .next
+#   Node.js version: 20
+#   Environment variables: DATABASE_URL, TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+
+# Bindings (uncomment and configure as needed)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "agentos-db"
+# database_id = "<your-database-id>"
+
+# [[kv_namespaces]]
+# binding = "KV"
+# id = "<your-namespace-id>"

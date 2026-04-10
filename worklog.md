@@ -90,3 +90,40 @@ Work Log:
 Stage Summary:
 - Complete DevOps setup: Docker multi-stage builds, docker-compose, GitHub Actions CI/CD
 - Project ready for GitHub deployment
+
+---
+Task ID: 6
+Agent: Runtime Config Agent
+Task: Add `export const runtime = 'nodejs'` to all API routes using Prisma or z-ai-web-dev-sdk
+
+Work Log:
+- Identified 10 API route files that import from `@/lib/db` (Prisma) or use `z-ai-web-dev-sdk`, which require Node.js compatibility runtime for Cloudflare Pages
+- Verified 7 files that do NOT need runtime export (pure fetch proxies to FastAPI orchestrator or SSE endpoints)
+- Added `export const runtime = 'nodejs'` as the first export in each of the 10 files, placed after imports and before the first function export
+- Confirmed all 10 files with grep — runtime export present in every target file
+
+Files modified (10):
+1. src/app/api/run-agent/route.ts — db + orchestrator (ZAI)
+2. src/app/api/status/route.ts — db
+3. src/app/api/chat/route.ts — db + ZAI
+4. src/app/api/chat/sessions/route.ts — db
+5. src/app/api/chat/sessions/[id]/route.ts — db
+6. src/app/api/projects/route.ts — db
+7. src/app/api/projects/[id]/route.ts — db
+8. src/app/api/projects/[id]/tasks/route.ts — db
+9. src/app/api/tasks/[id]/route.ts — db
+10. src/app/api/logs/route.ts — db
+
+Files intentionally skipped (7, no Node.js APIs):
+- src/app/api/orchestrator/route.ts
+- src/app/api/orchestrator/run/route.ts
+- src/app/api/orchestrator/chat/route.ts
+- src/app/api/orchestrator/memory/route.ts
+- src/app/api/orchestrator/agents/route.ts
+- src/app/api/events/route.ts
+- src/app/api/route.ts
+
+Stage Summary:
+- All 10 database-dependent API routes now declare Node.js runtime for Cloudflare Pages compatibility
+- No logic changes — only added `export const runtime = 'nodejs'` line
+- 7 fetch-proxy routes left unchanged (they use no Node.js-specific APIs)

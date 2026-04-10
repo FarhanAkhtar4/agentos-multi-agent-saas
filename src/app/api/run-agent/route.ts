@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { runPipeline } from '@/lib/agents/orchestrator'
 
+export const runtime = 'nodejs'
+
 // POST /api/run-agent — Run the full agent pipeline
 export async function POST(request: NextRequest) {
   try {

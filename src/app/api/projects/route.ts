@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 // GET /api/projects — List all projects with task count
 export async function GET() {
   try {

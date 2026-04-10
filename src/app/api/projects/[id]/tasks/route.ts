@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 // GET /api/projects/[id]/tasks — List tasks for project
 export async function GET(
   _request: NextRequest,

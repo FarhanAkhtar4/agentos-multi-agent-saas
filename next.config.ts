@@ -1,12 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  // Cloudflare Pages manages its own output — do NOT use "standalone"
   typescript: {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  // Allow external image domains
   images: {
     remotePatterns: [
       {

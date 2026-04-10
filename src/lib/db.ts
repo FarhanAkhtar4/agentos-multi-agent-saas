@@ -1,20 +1,38 @@
 // AgentOS - Database Client
-// Supports both local SQLite and Vercel Postgres
+// Supports: Local SQLite (dev), Turso/libSQL (production/Cloudflare)
 
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient } from "@prisma/client";
+import { PrismaLibSQL } from "@prisma/adapter-libsql";
+import { createClient } from "@libsql/client";
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
-}
+// ── Singleton cache (works in all runtimes) ─────────────────────
 
-function createPrismaClient() {
-  // On Vercel with Postgres, disable query logging for performance
-  const isVercel = !!process.env.VERCEL
+let _prisma: PrismaClient | null = null;
+
+function createPrismaClient(): PrismaClient {
+  // Turso/libSQL for production (Cloudflare, Railway, etc.)
+  const tursoUrl = process.env.TURSO_DATABASE_URL;
+  const tursoAuth = process.env.TURSO_AUTH_TOKEN;
+
+  if (tursoUrl) {
+    const libsql = createClient({
+      url: tursoUrl,
+      authToken: tursoAuth,
+    });
+    const adapter = new PrismaLibSQL(libsql);
+    return new PrismaClient({ adapter });
+  }
+
+  // Local SQLite for development
   return new PrismaClient({
-    ...(isVercel ? {} : { log: ['query'] }),
-  })
+    log:
+      process.env.NODE_ENV === "development" ? ["query"] : [],
+  });
 }
 
-export const db = globalForPrisma.prisma ?? createPrismaClient()
+export const db = _prisma ?? createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+// Cache in global scope for local dev hot-reload
+if (process.env.NODE_ENV !== "production") {
+  _prisma = db;
+}

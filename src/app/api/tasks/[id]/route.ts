@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 // GET /api/tasks/[id] — Get task with agent runs
 export async function GET(
   _request: NextRequest,

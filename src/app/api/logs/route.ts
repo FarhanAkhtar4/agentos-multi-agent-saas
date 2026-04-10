@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+export const runtime = 'nodejs'
+
 // GET /api/logs — List recent agent logs with optional filters
 export async function GET(request: NextRequest) {
   try {

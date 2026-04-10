@@ -3,6 +3,8 @@ import ZAI from 'z-ai-web-dev-sdk'
 import { db } from '@/lib/db'
 import { getAgentConfig } from '@/lib/agents/config'
 
+export const runtime = 'nodejs'
+
 // POST /api/chat — Send chat message and get AI response
 export async function POST(request: NextRequest) {
   try {

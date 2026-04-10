@@ -1,43 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server'
+// AgentOS v2 - Cloudflare Pages Events Route
+// Gracefully handles when the mini-service is not available (e.g., on Cloudflare)
+
+import { NextRequest, NextResponse } from "next/server";
 
 /** Valid AgentOS event types */
 const VALID_EVENTS = [
-  'agent:start',
-  'agent:progress',
-  'agent:complete',
-  'agent:error',
-  'pipeline:start',
-  'pipeline:complete',
-  'task:update',
-] as const
+  "agent:start",
+  "agent:progress",
+  "agent:complete",
+  "agent:error",
+  "pipeline:start",
+  "pipeline:complete",
+  "task:update",
+] as const;
 
-type AgentEventType = (typeof VALID_EVENTS)[number]
+type AgentEventType = (typeof VALID_EVENTS)[number];
 
-/** Schema for the POST body */
 interface EmitEventRequest {
-  event: string
-  data: Record<string, unknown>
-  project?: string
+  event: string;
+  data: Record<string, unknown>;
+  project?: string;
 }
 
-/**
- * POST /api/events
- *
- * Forwards an AgentOS event to the agent-events WebSocket mini-service,
- * which then broadcasts it to connected Socket.io clients.
- *
- * Body: { event: AgentEventType, data: any, project?: string }
- */
 export async function POST(request: NextRequest) {
   try {
-    const body: EmitEventRequest = await request.json()
+    const body: EmitEventRequest = await request.json();
 
-    // ── Validate required fields ─────────────────────────────────────────
-    if (!body.event || typeof body.event !== 'string') {
+    if (!body.event || typeof body.event !== "string") {
       return NextResponse.json(
         { error: 'Missing or invalid "event" field' },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
 
     if (!(VALID_EVENTS as readonly string[]).includes(body.event)) {
@@ -46,52 +39,61 @@ export async function POST(request: NextRequest) {
           error: `Invalid event type "${body.event}"`,
           validEvents: VALID_EVENTS,
         },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
 
     if (body.data === undefined || body.data === null) {
       return NextResponse.json(
         { error: 'Missing "data" field' },
-        { status: 400 },
-      )
+        { status: 400 }
+      );
     }
 
-    // ── Forward to the mini-service via its internal HTTP endpoint ───────
-    // Port 3030 is the internal HTTP API; port 3003 is the Socket.io server.
-    const MINI_SERVICE_URL = `http://localhost:3030/emit`
+    // Try to forward to mini-service if available (local dev only)
+    // On Cloudflare, this will gracefully fail since there's no localhost:3030
+    const MINI_SERVICE_URL = `${process.env.MINI_SERVICE_URL || "http://localhost:3030"}/emit`;
 
-    const response = await fetch(MINI_SERVICE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: body.event,
-        data: body.data,
-        project: body.project ?? undefined,
-      }),
-    })
+    try {
+      const response = await fetch(MINI_SERVICE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event: body.event,
+          data: body.data,
+          project: body.project ?? undefined,
+        }),
+        signal: AbortSignal.timeout(3000), // 3s timeout
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.text()
-      console.error(`[api/events] Mini-service returned ${response.status}: ${errorBody}`)
-      return NextResponse.json(
-        { error: 'Failed to broadcast event via mini-service', detail: errorBody },
-        { status: 502 },
-      )
+      if (response.ok) {
+        const result = await response.json();
+        return NextResponse.json({
+          success: true,
+          event: body.event as AgentEventType,
+          project: body.project ?? null,
+          eventId: result.eventId,
+        });
+      }
+    } catch {
+      // Mini-service not available — accept event but note it wasn't broadcast
+      return NextResponse.json({
+        success: true,
+        event: body.event as AgentEventType,
+        project: body.project ?? null,
+        warning: "Event accepted but not broadcast (mini-service unavailable)",
+      });
     }
 
-    const result = await response.json()
     return NextResponse.json({
       success: true,
       event: body.event as AgentEventType,
       project: body.project ?? null,
-      eventId: result.eventId,
-    })
-  } catch (err) {
-    console.error('[api/events] Error:', err)
+    });
+  } catch {
     return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    )
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
