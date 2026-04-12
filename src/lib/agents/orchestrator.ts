@@ -277,4 +277,4 @@ export async function runPipeline(
   }
 }
 
-export { PipelineResult }
+export type { PipelineResult }

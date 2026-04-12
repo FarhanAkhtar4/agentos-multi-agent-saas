@@ -15,7 +15,6 @@ import {
   Activity,
   MessageSquare,
   Database,
-  Settings,
   CheckCircle2,
   XCircle,
   Loader2,
@@ -35,7 +34,6 @@ import {
   Server,
   ClipboardList,
   LogOut,
-  Github,
   Sparkles,
 } from "lucide-react";
 

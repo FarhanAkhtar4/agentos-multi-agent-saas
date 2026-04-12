@@ -1,5 +1,5 @@
-// AgentOS v2 - Cloudflare Pages Events Route
-// Gracefully handles when the mini-service is not available (e.g., on Cloudflare)
+// AgentOS v2 - Events Route
+// Gracefully handles when the mini-service is not available
 
 import { NextRequest, NextResponse } from "next/server";
 
@@ -21,6 +21,8 @@ interface EmitEventRequest {
   data: Record<string, unknown>;
   project?: string;
 }
+
+const EVENTS_PORT = 3030;
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,12 +52,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try to forward to mini-service if available (local dev only)
-    // On Cloudflare, this will gracefully fail since there's no localhost:3030
-    const MINI_SERVICE_URL = `${process.env.MINI_SERVICE_URL || "http://localhost:3030"}/emit`;
-
+    // Try to forward to mini-service via gateway
     try {
-      const response = await fetch(MINI_SERVICE_URL, {
+      const response = await fetch(`/emit?XTransformPort=${EVENTS_PORT}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -63,7 +62,7 @@ export async function POST(request: NextRequest) {
           data: body.data,
           project: body.project ?? undefined,
         }),
-        signal: AbortSignal.timeout(3000), // 3s timeout
+        signal: AbortSignal.timeout(3000),
       });
 
       if (response.ok) {
