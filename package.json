@@ -19,6 +19,7 @@
     "@hookform/resolvers": "^5.1.1",
     "@libsql/client": "^0.17.2",
     "@mdxeditor/editor": "^3.39.1",
+    "@next-auth/prisma-adapter": "^1.0.7",
     "@prisma/adapter-libsql": "^7.7.0",
     "@prisma/client": "^6.11.1",
     "@radix-ui/react-accordion": "^1.2.11",

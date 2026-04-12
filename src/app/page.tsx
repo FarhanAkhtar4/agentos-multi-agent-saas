@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
+import { useSession, signIn, signOut } from "next-auth/react";
 import {
   Crown,
   Code2,
@@ -33,6 +34,9 @@ import {
   User,
   Server,
   ClipboardList,
+  LogOut,
+  Github,
+  Sparkles,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -58,7 +62,21 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
 import {
   Select,
   SelectContent,
@@ -145,6 +163,20 @@ const AGENTS: AgentDef[] = [
     icon: Crown,
   },
   {
+    id: "pm",
+    name: "PM Agent",
+    role: "Product Manager",
+    description:
+      "Creates detailed product specifications from strategic goals, including feature breakdowns and user stories.",
+    systemPrompt:
+      "You are the Product Manager Agent of AgentOS. Based on the CEO's strategic analysis, create a detailed product specification including: 1) Feature breakdown, 2) User stories, 3) Technical requirements, 4) Priority matrix.",
+    color: "#F59E0B",
+    bgClass: "bg-amber-500/15",
+    textClass: "text-amber-400",
+    borderClass: "border-amber-500/30",
+    icon: ClipboardList,
+  },
+  {
     id: "developer",
     name: "Developer Agent",
     role: "Senior Developer",
@@ -171,6 +203,20 @@ const AGENTS: AgentDef[] = [
     textClass: "text-red-400",
     borderClass: "border-red-500/30",
     icon: ShieldCheck,
+  },
+  {
+    id: "devops",
+    name: "DevOps Agent",
+    role: "DevOps Engineer",
+    description:
+      "Creates deployment plans, infrastructure recommendations, and CI/CD pipeline configurations.",
+    systemPrompt:
+      "You are the DevOps Engineer Agent of AgentOS. Based on all previous agent outputs, create: 1) Deployment plan, 2) Infrastructure requirements, 3) CI/CD pipeline steps, 4) Monitoring and alerting recommendations.",
+    color: "#06B6D4",
+    bgClass: "bg-cyan-500/15",
+    textClass: "text-cyan-400",
+    borderClass: "border-cyan-500/30",
+    icon: Server,
   },
 ];
 
@@ -259,10 +305,207 @@ function truncate(str: string, len: number): string {
 }
 
 /* ================================================================
+   LOGIN SCREEN
+   ================================================================ */
+
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await signIn("credentials", {
+        email: email.trim(),
+        password: password.trim(),
+        redirect: false,
+      });
+      if (result?.error) {
+        setError("Invalid credentials. Please try again.");
+      }
+    } catch {
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = () => {
+    signIn("google", { callbackUrl: "/" });
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background relative overflow-hidden">
+      {/* Background gradient effects */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -right-40 h-80 w-80 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 -left-40 h-80 w-80 rounded-full bg-cyan-500/10 blur-3xl" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-96 w-96 rounded-full bg-violet-500/5 blur-3xl" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md mx-4">
+        {/* Logo + Title */}
+        <div className="text-center mb-8">
+          <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center shadow-xl shadow-violet-500/20 mx-auto mb-4">
+            <Brain className="h-8 w-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight">AgentOS</h1>
+          <p className="text-muted-foreground mt-1.5 text-sm">
+            Multi-Agent AI Orchestration Platform
+          </p>
+        </div>
+
+        {/* Login Card */}
+        <Card className="bg-card/80 backdrop-blur-xl border-border/50 shadow-2xl">
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="text-xl">Sign in to AgentOS</CardTitle>
+            <CardDescription>
+              Enter your credentials to access the dashboard
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Google Sign In */}
+            <Button
+              variant="outline"
+              className="w-full gap-2 h-11 border-border/50 hover:border-violet-500/50"
+              onClick={handleGoogleSignIn}
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
+              </svg>
+              Continue with Google
+            </Button>
+
+            {/* Divider */}
+            <div className="relative flex items-center">
+              <Separator className="flex-1" />
+              <span className="px-3 text-xs text-muted-foreground">or</span>
+              <Separator className="flex-1" />
+            </div>
+
+            {/* Email/Password Form */}
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Email
+                </label>
+                <Input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  className="h-11"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Password
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                    className="h-11 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    tabIndex={-1}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-red-300">{error}</p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading || !email.trim() || !password.trim()}
+                className="w-full h-11 gap-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white shadow-lg shadow-violet-500/20"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Signing in...
+                  </>
+                ) : (
+                  "Sign In"
+                )}
+              </Button>
+            </form>
+
+            {/* Demo hint */}
+            <p className="text-center text-[11px] text-muted-foreground">
+              Demo mode: any email &amp; password will work
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Footer */}
+        <p className="text-center text-xs text-muted-foreground mt-6">
+          &copy; 2024 AgentOS &middot; Multi-Agent AI Platform
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================
+   FULL-SCREEN LOADING
+   ================================================================ */
+
+function AuthLoadingScreen() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+      <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-violet-500/20">
+        <Brain className="h-6 w-6 text-white" />
+      </div>
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
+        <span className="text-sm text-muted-foreground">Loading AgentOS...</span>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================
    MAIN PAGE
    ================================================================ */
 
 export default function AgentOSPage() {
+  const { data: session, status } = useSession();
   const { theme, setTheme } = useTheme();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -279,8 +522,21 @@ export default function AgentOSPage() {
 
   const cycleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
 
+  // Auth state handling
+  if (status === "loading") {
+    return <AuthLoadingScreen />;
+  }
+
+  if (!session) {
+    return <LoginScreen />;
+  }
+
+  const userInitial = session.user?.name
+    ? session.user.name.charAt(0).toUpperCase()
+    : "U";
+
   return (
-    <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
+    <div className="min-h-screen flex flex-col bg-background text-foreground">
       {/* ── HEADER ─────────────────────────────────────────── */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex items-center justify-between px-4 md:px-6 h-14">
@@ -294,7 +550,7 @@ export default function AgentOSPage() {
             </span>
           </div>
 
-          {/* Status + Theme */}
+          {/* Status + Theme + User Menu */}
           <div className="flex items-center gap-3">
             <Badge
               variant="outline"
@@ -325,6 +581,48 @@ export default function AgentOSPage() {
               <Sun className="h-4 w-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
               <Moon className="absolute h-4 w-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
             </Button>
+
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="h-8 gap-2 pl-1.5 pr-2">
+                  <Avatar className="h-6 w-6">
+                    <AvatarImage src={session.user?.image || undefined} />
+                    <AvatarFallback className="h-6 w-6 text-[10px] bg-gradient-to-br from-violet-500 to-cyan-500 text-white">
+                      {userInitial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden sm:inline text-xs font-medium max-w-[120px] truncate">
+                    {session.user?.name || "User"}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {session.user?.name || "User"}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {session.user?.email || ""}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="gap-2 cursor-pointer text-xs">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Plan: <span className="ml-auto text-violet-400 font-medium">Pro</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/" })}
+                  className="gap-2 cursor-pointer text-xs text-red-400 focus:text-red-400"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </header>
@@ -380,6 +678,18 @@ export default function AgentOSPage() {
           </TabsContent>
         </div>
       </Tabs>
+
+      {/* ── STICKY FOOTER ───────────────────────────────────── */}
+      <footer className="border-t border-border bg-background/60 backdrop-blur-sm">
+        <div className="flex items-center justify-between px-4 md:px-6 h-10 text-xs text-muted-foreground">
+          <span>&copy; 2024 AgentOS</span>
+          <div className="flex items-center gap-4">
+            <button className="hover:text-foreground transition-colors">Documentation</button>
+            <button className="hover:text-foreground transition-colors">API Reference</button>
+            <button className="hover:text-foreground transition-colors">Support</button>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
@@ -493,7 +803,7 @@ function DashboardView({ onNavigate }: { onNavigate: (tab: string) => void }) {
               Agent Pipeline Flow
             </CardTitle>
             <CardDescription>
-              Sequential multi-agent execution: CEO → Developer → QA
+              Sequential multi-agent execution: CEO → PM → Developer → QA → DevOps
             </CardDescription>
           </CardHeader>
           <CardContent>
